@@ -119,6 +119,7 @@ The icon is an abstract S-curve built from three parallel flowing lines — simu
 - Never set body paragraphs in Recoleta.
 - Favor generous white space over dense type.
 - Hierarchy: one dominant Recoleta headline + Helvetica Neue support text is the standard two-level system.
+- For quotes or social posts, use all lowercase except biblical words such as "Jesus" "Lord" "God"
 
 ### Size Guidelines (Social / Digital)
 
