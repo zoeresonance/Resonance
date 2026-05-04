@@ -1,0 +1,82 @@
+# Stonecreek Instagram Posts — Master Guide
+
+This is the index. When asked to make a post, pick the archetype that fits the content, then read its detailed guide in `archetypes/`.
+
+**Always:** 1080 × 1350 (4:5 portrait). Lowercase except for God / Jesus / Lord / Holy Spirit and proper nouns. Recoleta for display, Helvetica Neue for body/UI, brand color tokens only.
+
+---
+
+## Pick the archetype
+
+| If the content is… | Use archetype | File |
+|---|---|---|
+| A short pastor or scripture quote, no photo available | **01 · Quote (minimal)** | `archetypes/01_quote_minimal.md` |
+| A scripture passage longer than ~10 words | **02 · Scripture (textured)** | `archetypes/02_scripture_textured.md` |
+| A pastor quote, photo of the moment is available | **03 · Quote over photo** | `archetypes/03_quote_over_photo.md` |
+| Sermon clip / longer pull-quote with the speaker visible | **04 · Sermon pull-quote** | `archetypes/04_sermon_pullquote.md` |
+| Promoting an event, class, or program | **05 · Event announcement** | `archetypes/05_event_announcement.md` |
+| Sub-brand identity post (KIDS / YTH big logo over photo) | **06 · Sub-brand hero** | `archetypes/06_subbrand_hero.md` |
+
+---
+
+## Things that are true across all archetypes
+
+### Texture is in our DNA
+Every post should have at least one of these textural elements somewhere:
+- A **soft grain/noise** overlay on solid color fields (subtle — don't overdo)
+- **Halftone dot circles** (a circle filled with a dot pattern, in moss or sand)
+- **Hollow rings** (1.5–3px stroke, anchored to an edge or floating)
+- **Solid filled circles** in pebble or moss
+
+Combinations of these are great — a halftone dot circle overlapping a solid pebble circle is on-brand. They live in the negative space, never on top of the words.
+
+### Color anchors
+Most posts use **Mossy Green** or **Pebble White** as the ground. Sand and Moss-Mid are common accents. We rarely use full saturation except for the sub-brand colors (KIDS Aqua, YTH Punch Yellow). Photos lean cool/neutral, not warm.
+
+### Type behavior
+- **Quotes & scripture**: Recoleta Italic is used often for the quote body. Recoleta Regular for headlines.
+- **Reference / metadata** (book + verse, date, sermon series name): smaller, sometimes Recoleta Bold
+- **Body / supporting**: Helvetica Neue Light or Regular
+- **Lowercase by default**, but proper-noun event titles ("Financial Peace University") and scripture references ("Lamentations 3:22-23") use title case.
+
+### Casing rule (strict)
+**Lowercase everything by default.** The only exceptions are biblical words and references to them:
+- **Always capitalized**: God, Jesus, Lord, Father, Son, Holy Spirit, Christ, Savior, Word (when meaning Scripture)
+- **Always capitalized when referring to God**: He, His, Him, You, Your (in prayer/address)
+- **Always capitalized**: books of the Bible and scripture references — "Lamentations 3:22-23", "Mark 1:35"
+
+Everything else is lowercase. That includes:
+- Pastor names and attribution: "— pastor ricky", "— pastor severin awori lwali"
+- Event and program titles: "financial peace university", "21 days of prayer"
+- Sermon series names
+- Days, months, locations
+- Roles (pastor, elder, leader)
+
+This applies across **all** archetypes — including the editorial sermon pull-quote. If a previous archetype file shows Title Case in an attribution, treat this rule as overriding it.
+
+### Anatomy across all archetypes
+1. **Ground** — color, photo, or photo-with-overlay
+2. **Texture layer** — grain, halftone, rings, or solid circles
+3. **Headline / quote** — the main idea
+4. **Reference / attribution** — who said it, where it's from, when it's happening
+5. **Brand mark** — symbol, wordmark, or sub-brand lockup (sometimes implicit, e.g. on Stonecreek-only posts)
+
+### Don'ts
+- No emoji
+- No drop shadows on type
+- No gradients as primary backgrounds
+- No warm/orange filters on photos
+- No solid rectangles behind type to make it readable — pick a different photo or move the type instead
+- No more than two textural elements layered (it gets noisy)
+- No filling the whole canvas with type — give it air
+
+---
+
+## When in doubt
+
+- **Is the content reverent / weighty?** Lean Mossy Green ground, Recoleta italic, more space.
+- **Is it inviting / community-focused?** Pebble or Sand ground, photo-forward, room for warmth.
+- **Is it KIDS?** Aqua + Sunny Glow palette, more energetic shapes.
+- **Is it YTH?** Black ground, Punch Yellow accents, big and confident.
+
+If the content doesn't clearly fit one of the six archetypes, ask before designing.
