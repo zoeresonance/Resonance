@@ -361,22 +361,24 @@ async function analyzeWithGemini(
     ? 'the screenshot (most accurate) and the candidate list as a reference'
     : 'the CANDIDATE COLORS list extracted from CSS and inline styles';
 
-  const prompt = `You are a brand analyst extracting the complete color palette from a website screenshot.
-${hasScreenshot ? 'A full-page rendered screenshot is attached. Use it as your ONLY source for colors and fonts — look at every pixel.' : ''}
+  const prompt = `You are a brand analyst. Classify the CANDIDATE COLORS list into primary and accent brand colors.
+${hasScreenshot ? 'A rendered screenshot is attached — use it to judge which candidate colors are visually prominent on the page.' : ''}
+
+STRICT RULE: You MUST only return hex values that appear EXACTLY in the CANDIDATE COLORS list. Do not invent, approximate, or interpolate any color. Every hex value in your response must match one from the list verbatim.
 
 Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "primary_colors": Array of 1-3 hex strings for dominant background/base colors (e.g. black, white, navy).
-4. "accent_colors": Array of 4-8 hex strings for EVERY distinct color visible in graphics, illustrations, gradients, CTAs, and decorative elements. If you see a spectrum or multi-color graphic (e.g. semicircles, waves, gradient bands), extract EACH individual color from it. Be exhaustive — include teals, olives, oranges, reds, burgundies, warm tones, cool tones. EXCLUDE colors that are within 15 hex points of pure black (#000000) or pure white (#FFFFFF).
-5. "fonts": Array of 1-3 font names as their REAL published names. Convert CSS identifiers: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". Return only distinct typeface families (not weights). If none detected return [].
+3. "primary_colors": Array of 1-3 hex values FROM THE CANDIDATE LIST for dominant background/base colors.
+4. "accent_colors": Array of 4-8 hex values FROM THE CANDIDATE LIST. Include warm and cool tones visible in graphics, illustrations, and CTAs. EXCLUDE values where all RGB channels are below 50 or above 210.
+5. "fonts": Array of 1-3 font names as REAL published names. Convert: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". One entry per typeface family. Return [] if none found.
 
 Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-CANDIDATE COLORS (from CSS/SVG — use as hints only, screenshot takes priority):
+CANDIDATE COLORS (ONLY return values from this exact list):
 ${allHexColors.slice(0, 300).join(', ')}
 
 CANDIDATE FONTS:
@@ -414,8 +416,12 @@ Return ONLY valid JSON, no markdown:
 
   try {
     const parsed = JSON.parse(jsonStr);
+    const candidateSet = new Set(allHexColors.map(c => c.toUpperCase()));
     const validHex = (arr: unknown) => Array.isArray(arr)
-      ? (arr as unknown[]).filter((c): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/i.test(c))
+      ? (arr as unknown[]).filter((c): c is string =>
+          typeof c === 'string' &&
+          /^#[0-9a-fA-F]{6}$/i.test(c) &&
+          candidateSet.has(c.toUpperCase()))
       : [];
     return {
       brand_voice: parsed.brand_voice ?? '',
