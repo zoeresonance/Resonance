@@ -3,7 +3,8 @@
 interface BrandResult {
   siteName: string;
   url: string;
-  colors: string[];
+  primaryColors: string[];
+  accentColors: string[];
   fonts: string[];
   logos: string[];
   brandVoice: string;
@@ -36,7 +37,25 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function BrandKit({ result }: Props) {
-  const { colors, fonts, logos, brandVoice, brandStory } = result;
+  const { primaryColors, accentColors, fonts, logos, brandVoice, brandStory } = result;
+
+  function ColorSwatches({ colors }: { colors: string[] }) {
+    return (
+      <div className="flex flex-wrap gap-4">
+        {colors.map((hex) => (
+          <div key={hex} className="flex flex-col items-center gap-2">
+            <div
+              className="w-16 h-16 rounded-xl shadow-lg border border-white/10 cursor-pointer transition-transform hover:scale-105"
+              style={{ backgroundColor: hex }}
+              title={`Click to copy ${hex}`}
+              onClick={() => navigator.clipboard?.writeText(hex)}
+            />
+            <span className="text-xs text-gray-400 font-mono">{hex}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-0">
@@ -54,22 +73,18 @@ export default function BrandKit({ result }: Props) {
         </Section>
       )}
 
-      {/* Color Palette */}
-      {colors.length > 0 && (
-        <Section title={`Color Palette (${colors.length})`}>
-          <div className="flex flex-wrap gap-4">
-            {colors.map((hex) => (
-              <div key={hex} className="flex flex-col items-center gap-2">
-                <div
-                  className="w-16 h-16 rounded-xl shadow-lg border border-white/10 cursor-pointer transition-transform hover:scale-105"
-                  style={{ backgroundColor: hex }}
-                  title={hex}
-                  onClick={() => navigator.clipboard?.writeText(hex)}
-                />
-                <span className="text-xs text-gray-400 font-mono">{hex}</span>
-              </div>
-            ))}
-          </div>
+      {/* Primary Colors */}
+      {primaryColors.length > 0 && (
+        <Section title={`Primary Colors (${primaryColors.length})`}>
+          <ColorSwatches colors={primaryColors} />
+          <p className="text-xs text-gray-600 mt-3">Click a swatch to copy the hex code.</p>
+        </Section>
+      )}
+
+      {/* Accent Colors */}
+      {accentColors.length > 0 && (
+        <Section title={`Accent Colors (${accentColors.length})`}>
+          <ColorSwatches colors={accentColors} />
           <p className="text-xs text-gray-600 mt-3">Click a swatch to copy the hex code.</p>
         </Section>
       )}
@@ -140,7 +155,7 @@ export default function BrandKit({ result }: Props) {
       )}
 
       {/* Empty state */}
-      {!brandStory && !brandVoice && colors.length === 0 && fonts.length === 0 && logos.length === 0 && (
+      {!brandStory && !brandVoice && primaryColors.length === 0 && accentColors.length === 0 && fonts.length === 0 && logos.length === 0 && (
         <div className="rounded-2xl bg-gray-900 border border-gray-800 p-10 text-center text-gray-500">
           No brand data could be extracted from this URL.
         </div>

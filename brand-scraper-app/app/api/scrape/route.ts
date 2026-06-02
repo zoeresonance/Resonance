@@ -6,7 +6,8 @@ import * as cheerio from 'cheerio';
 interface ScrapeResult {
   siteName: string;
   url: string;
-  colors: string[];
+  primaryColors: string[];
+  accentColors: string[];
   fonts: string[];
   logos: string[];
   brandVoice: string;
@@ -17,7 +18,8 @@ interface ScrapeResult {
 interface GeminiAnalysis {
   brand_voice: string;
   brand_story: string;
-  colors: string[];
+  primary_colors: string[];
+  accent_colors: string[];
   fonts: string[];
 }
 
@@ -142,15 +144,23 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
 
   function addInlineSvg(el: any) {
     const svgHtml = $.html(el) as string;
-    if (svgHtml && svgHtml.length > 10 && svgHtml.length < 100000) {
-      logosSet.add(`data:image/svg+xml;base64,${Buffer.from(svgHtml).toString('base64')}`);
-    }
+    if (!svgHtml || svgHtml.length < 10 || svgHtml.length > 100000) return;
+    // Prefer landscape SVGs (wordmarks) — skip small square/portrait icons
+    const vb = $(el).attr('viewBox') || '';
+    const w = parseFloat($(el).attr('width') || '0');
+    const h = parseFloat($(el).attr('height') || '0');
+    const [, , vbW, vbH] = vb.split(/[\s,]+/).map(parseFloat);
+    const effectiveW = w || vbW || 0;
+    const effectiveH = h || vbH || 0;
+    // Skip tiny icons: must be landscape OR have no explicit dimensions (assume wordmark)
+    if (effectiveW > 0 && effectiveH > 0 && effectiveH > effectiveW * 0.8) return;
+    logosSet.add(`data:image/svg+xml;base64,${Buffer.from(svgHtml).toString('base64')}`);
   }
 
-  // Tier 1: imgs/svgs inside header/nav
+  // Tier 1: imgs/svgs inside header/nav — collect ALL svgs and pick best
   const navCtx = $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]');
   navCtx.find('img').each((_: number, el: any) => addSrc($(el).attr('src') || $(el).attr('data-src') || ''));
-  navCtx.find('svg').first().each((_: number, el: any) => addInlineSvg(el));
+  navCtx.find('svg').each((_: number, el: any) => addInlineSvg(el));
 
   // Tier 2: <a href="/"> wrapping img/svg
   $('a').each((_: number, el: any) => {
@@ -207,18 +217,19 @@ async function analyzeWithGemini(
 
   const prompt = `You are a brand analyst. Analyze the website data below to extract brand identity.
 
-Return a JSON object with EXACTLY these four keys:
+Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "colors": Pick 3-8 hex codes from the CANDIDATE COLORS list that represent the brand's intentional palette — accent colors, button colors, link colors, hero/section backgrounds, logo colors. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) and pure grays (r≈g≈b) unless clearly a brand choice. Return as "#RRGGBB" strings.
-4. "fonts": Pick 1-3 font names from the CANDIDATE FONTS list that are the primary typefaces. If the list is empty return an empty array.
+3. "primary_colors": Array of 1-3 hex strings for the brand's MAIN colors — the dominant background, primary text color if it's a brand color, and the single most prominent brand color.
+4. "accent_colors": Array of 2-5 hex strings for secondary/supporting colors — CTAs, highlights, decorative elements, hover states, secondary sections. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional brand choices.
+5. "fonts": Array of 1-3 font names from the CANDIDATE FONTS list. If a name looks like a CSS identifier (e.g. "madefor-display-bold"), convert it to a proper font name (e.g. "Made For Display Bold"). If the list is empty return [].
 
 Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-CANDIDATE COLORS (all hex values found on the page):
+CANDIDATE COLORS (extracted from page CSS and inline styles — no script content):
 ${allHexColors.slice(0, 300).join(', ')}
 
 CANDIDATE FONTS:
@@ -228,7 +239,7 @@ PAGE TEXT (truncated):
 ${pageText.slice(0, 2000)}
 
 Return ONLY valid JSON, no markdown:
-{"brand_voice":"...","brand_story":"...","colors":["#RRGGBB",...],"fonts":["..."]}`;
+{"brand_voice":"...","brand_story":"...","primary_colors":["#RRGGBB",...],"accent_colors":["#RRGGBB",...],"fonts":["..."]}`;
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -252,16 +263,18 @@ Return ONLY valid JSON, no markdown:
 
   try {
     const parsed = JSON.parse(jsonStr);
+    const validHex = (arr: unknown) => Array.isArray(arr)
+      ? (arr as unknown[]).filter((c): c is string => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/i.test(c))
+      : [];
     return {
       brand_voice: parsed.brand_voice ?? '',
       brand_story: parsed.brand_story ?? '',
-      colors: Array.isArray(parsed.colors)
-        ? parsed.colors.filter((c: unknown) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/i.test(c)).slice(0, 10)
-        : [],
+      primary_colors: validHex(parsed.primary_colors).slice(0, 3),
+      accent_colors: validHex(parsed.accent_colors).slice(0, 6),
       fonts: Array.isArray(parsed.fonts) ? parsed.fonts.slice(0, 3) : [],
     };
   } catch {
-    return { brand_voice: text, brand_story: '', colors: [], fonts: [] };
+    return { brand_voice: text, brand_story: '', primary_colors: [], accent_colors: [], fonts: [] };
   }
 }
 
@@ -276,9 +289,14 @@ function buildMarkdown(result: Omit<ScrapeResult, 'markdown'>): string {
   lines.push('');
   if (result.brandStory) { lines.push('## Brand Story', '', result.brandStory, ''); }
   if (result.brandVoice) { lines.push('## Brand Voice', '', result.brandVoice, ''); }
-  if (result.colors.length > 0) {
-    lines.push('## Color Palette', '');
-    for (const c of result.colors) lines.push(`- \`${c}\``);
+  if (result.primaryColors.length > 0) {
+    lines.push('## Primary Colors', '');
+    for (const c of result.primaryColors) lines.push(`- \`${c}\``);
+    lines.push('');
+  }
+  if (result.accentColors.length > 0) {
+    lines.push('## Accent Colors', '');
+    for (const c of result.accentColors) lines.push(`- \`${c}\``);
     lines.push('');
   }
   if (result.fonts.length > 0) {
@@ -359,7 +377,7 @@ export async function POST(req: NextRequest) {
   const pageText = $('body').text().replace(/\s+/g, ' ').trim();
 
   // ── 8. Gemini analysis ──────────────────────────────────────────────────
-  let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', colors: [], fonts: [] };
+  let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', primary_colors: [], accent_colors: [], fonts: [] };
   try {
     analysis = await analyzeWithGemini(pageText, allHexColors, cssFonts, googleFonts, siteName, targetUrl, ogDescription);
   } catch (err) {
@@ -373,7 +391,8 @@ export async function POST(req: NextRequest) {
   const partial: Omit<ScrapeResult, 'markdown'> = {
     siteName,
     url: targetUrl,
-    colors: analysis.colors,
+    primaryColors: analysis.primary_colors,
+    accentColors: analysis.accent_colors,
     fonts,
     logos,
     brandVoice: analysis.brand_voice,

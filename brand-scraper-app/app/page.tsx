@@ -6,7 +6,8 @@ import BrandKit from './components/BrandKit';
 interface BrandResult {
   siteName: string;
   url: string;
-  colors: string[];
+  primaryColors: string[];
+  accentColors: string[];
   fonts: string[];
   logos: string[];
   brandVoice: string;
