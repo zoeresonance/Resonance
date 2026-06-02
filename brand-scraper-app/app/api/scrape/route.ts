@@ -25,26 +25,30 @@ function normaliseHex(raw: string): string | null {
   return '#' + h.toUpperCase();
 }
 
-/** Return true when the hex is near-black or near-white (filter these out). */
-function isNearBlackOrWhite(hex: string): boolean {
+/** Return true when the hex is near-black, near-white, or a generic gray. */
+function isNoise(hex: string): boolean {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  // near-black: all channels < 16 (0x10)
-  if (r < 16 && g < 16 && b < 16) return true;
-  // near-white: all channels > 239 (0xEF)  — maps to > #EFEFEF
-  if (r > 239 && g > 239 && b > 239) return true;
+  // near-black
+  if (r < 50 && g < 50 && b < 50) return true;
+  // near-white
+  if (r > 210 && g > 210 && b > 210) return true;
+  // gray: all channels within 15 of each other
+  if (Math.max(r, g, b) - Math.min(r, g, b) < 15) return true;
   return false;
 }
 
-/** Extract all hex colour values from a CSS string. */
-function extractColorsFromCss(css: string): string[] {
+/** Extract hex colours from a CSS string, optionally only from :root / custom properties. */
+function extractColorsFromCss(css: string, customPropsOnly = false): string[] {
   const results: string[] = [];
-  // Match #RGB and #RRGGBB
-  const matches = css.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g) || [];
+  const source = customPropsOnly
+    ? (css.match(/:root\s*\{[\s\S]*?\}/g) || []).join('\n')
+    : css;
+  const matches = source.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g) || [];
   for (const m of matches) {
     const norm = normaliseHex(m);
-    if (norm && !isNearBlackOrWhite(norm)) results.push(norm);
+    if (norm && !isNoise(norm)) results.push(norm);
   }
   return results;
 }
@@ -263,31 +267,52 @@ export async function POST(req: NextRequest) {
 
   const siteName = title.trim().slice(0, 120) || parsedUrl.hostname;
 
-  // ── 3. Inline CSS from <style> blocks ───────────────────────────────────
+  // ── 3. Inline <style> blocks ────────────────────────────────────────────
   let inlineCss = '';
   $('style').each((_, el) => {
     inlineCss += $(el).text() + '\n';
   });
 
-  // Collect colors and fonts from inline CSS
-  const colorsSet = new Set<string>(extractColorsFromCss(inlineCss));
   const fontsSet = new Set<string>(extractFontsFromCss(inlineCss));
 
-  // ── 4. Inline style attributes ──────────────────────────────────────────
-  $('[style]').each((_, el) => {
+  // Priority 1: CSS custom properties in :root — most reliable brand colors
+  const rootColors = new Set<string>(extractColorsFromCss(inlineCss, true));
+
+  // Priority 2: inline style attributes on header/nav/hero elements
+  const prominentColors = new Set<string>();
+  $('header, nav, [class*="hero"], [class*="banner"], [id*="hero"], [id*="banner"], h1, h2').each((_, el) => {
     const style = $(el).attr('style') || '';
-    for (const c of extractColorsFromCss(style)) colorsSet.add(c);
+    if (style) {
+      for (const c of extractColorsFromCss(style)) prominentColors.add(c);
+    }
   });
 
-  // ── 5. Google Fonts from <link> tags ────────────────────────────────────
+  // Priority 3: CSS custom properties from the first linked stylesheet only
+  const cssLinks: string[] = [];
+  $('link[rel="stylesheet"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    if (!href.includes('fonts.googleapis.com') && cssLinks.length < 1) {
+      const abs = resolveUrl(href, targetUrl);
+      if (abs) cssLinks.push(abs);
+    }
+  });
+
+  const externalRootColors = new Set<string>();
+  if (cssLinks.length > 0) {
+    const css = await fetchCss(cssLinks[0]);
+    if (css) {
+      for (const c of extractColorsFromCss(css, true)) externalRootColors.add(c);
+      for (const f of extractFontsFromCss(css)) fontsSet.add(f);
+    }
+  }
+
+  // ── 4. Google Fonts from <link> tags ────────────────────────────────────
   $('link[rel="stylesheet"]').each((_, el) => {
     const href = $(el).attr('href') || '';
     if (href.includes('fonts.googleapis.com')) {
-      // Extract family names from URL: ?family=Open+Sans:400|Roboto
       const match = href.match(/[?&]family=([^&]+)/);
       if (match) {
-        const families = match[1].split('|');
-        for (const fam of families) {
+        for (const fam of match[1].split('|')) {
           const name = decodeURIComponent(fam.split(':')[0]).replace(/\+/g, ' ').trim();
           if (name) fontsSet.add(name);
         }
@@ -295,55 +320,63 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  // ── 6. Fetch linked stylesheets (up to 3, skip Google Fonts) ───────────
-  const cssLinks: string[] = [];
-  $('link[rel="stylesheet"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    if (!href.includes('fonts.googleapis.com') && cssLinks.length < 3) {
-      const abs = resolveUrl(href, targetUrl);
-      if (abs) cssLinks.push(abs);
-    }
-  });
+  // Merge colors: root vars first, then prominent element colors, then external root vars
+  const colorsSet = new Set<string>([...rootColors, ...prominentColors, ...externalRootColors]);
 
-  await Promise.all(
-    cssLinks.map(async (cssUrl) => {
-      const css = await fetchCss(cssUrl);
-      if (!css) return;
-      for (const c of extractColorsFromCss(css)) colorsSet.add(c);
-      for (const f of extractFontsFromCss(css)) fontsSet.add(f);
-    })
-  );
-
-  // ── 7. Logo detection ───────────────────────────────────────────────────
+  // ── 5. Logo detection ───────────────────────────────────────────────────
   const logosSet = new Set<string>();
+  const logoPattern = /logo|brand|mark|emblem/i;
 
-  // <img> tags with logo-ish signals
-  $('img').each((_, el) => {
-    const src = $(el).attr('src') || '';
-    const alt = ($(el).attr('alt') || '').toLowerCase();
-    const cls = ($(el).attr('class') || '').toLowerCase();
-    const id = ($(el).attr('id') || '').toLowerCase();
-    const isLogo =
-      /logo|brand|mark|emblem|icon/.test(src.toLowerCase()) ||
-      /logo|brand|mark/.test(alt) ||
-      /logo|brand|mark/.test(cls) ||
-      /logo|brand|mark/.test(id);
-    if (isLogo && src) {
-      const abs = resolveUrl(src, targetUrl);
-      if (abs) logosSet.add(abs);
+  // Priority 1: <img> or <svg> inside <header> or <nav>
+  $('header, nav').find('img, svg').each((_, el) => {
+    if (el.type === 'tag' && el.name === 'img') {
+      const src = $(el).attr('src') || $(el).attr('data-src') || '';
+      if (src && !src.startsWith('data:')) {
+        const abs = resolveUrl(src, targetUrl);
+        if (abs) logosSet.add(abs);
+      }
+    } else if (el.type === 'tag' && el.name === 'svg') {
+      logosSet.add('[inline SVG logo in header/nav]');
     }
   });
 
-  // <link rel="icon"> / apple-touch-icon
-  $('link[rel*="icon"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    if (href) {
-      const abs = resolveUrl(href, targetUrl);
-      if (abs) logosSet.add(abs);
-    }
+  // Priority 2: <a href="/"> containing an img or svg (common logo wrapper pattern)
+  $('a[href="/"], a[href="' + targetUrl + '"]').each((_, el) => {
+    $(el).find('img').each((_2, img) => {
+      const src = $(img).attr('src') || '';
+      if (src && !src.startsWith('data:')) {
+        const abs = resolveUrl(src, targetUrl);
+        if (abs) logosSet.add(abs);
+      }
+    });
+    if ($(el).find('svg').length > 0) logosSet.add('[inline SVG logo in home link]');
   });
 
-  // ── 8. Page text (stripped) ─────────────────────────────────────────────
+  // Priority 3: any <img> anywhere whose src/alt/class/id hints at logo
+  if (logosSet.size === 0) {
+    $('img').each((_, el) => {
+      const src = $(el).attr('src') || '';
+      const alt = $(el).attr('alt') || '';
+      const cls = ($(el).attr('class') || '') + ' ' + ($(el).attr('id') || '');
+      if (logoPattern.test(src) || logoPattern.test(alt) || logoPattern.test(cls)) {
+        const abs = resolveUrl(src, targetUrl);
+        if (abs && !src.startsWith('data:')) logosSet.add(abs);
+      }
+    });
+  }
+
+  // Last resort: favicon
+  if (logosSet.size === 0) {
+    $('link[rel*="icon"]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      if (href) {
+        const abs = resolveUrl(href, targetUrl);
+        if (abs) logosSet.add(abs);
+      }
+    });
+  }
+
+  // ── 6. Page text (stripped) ─────────────────────────────────────────────
   $('script, style, noscript, iframe, nav, footer, header').remove();
   const bodyText = $('body')
     .text()
@@ -356,7 +389,7 @@ export async function POST(req: NextRequest) {
     $('meta[name="description"]').attr('content') ||
     '';
 
-  // ── 9. Gemini call ──────────────────────────────────────────────────────
+  // ── 7. Gemini call ──────────────────────────────────────────────────────
   const prompt = `You are a brand analyst. Analyse the following website content and return a JSON object with exactly two keys:
 - "brand_voice": A paragraph describing the brand's tone, communication style, and personality (2-4 sentences).
 - "brand_story": A paragraph describing what the company does, its mission/values, and who it serves (3-5 sentences).
@@ -379,12 +412,12 @@ Return ONLY valid JSON, no markdown fences, no extra text:
     console.error('Gemini error:', err);
   }
 
-  // ── 10. Deduplicate and cap ─────────────────────────────────────────────
+  // ── 8. Deduplicate and cap ──────────────────────────────────────────────
   const colors = [...colorsSet].slice(0, 20);
-  const fonts = [...new Set([...fontsSet])].slice(0, 15);
+  const fonts = [...fontsSet].slice(0, 15);
   const logos = [...logosSet].slice(0, 8);
 
-  // ── 11. Build result ────────────────────────────────────────────────────
+  // ── 9. Build result ─────────────────────────────────────────────────────
   const partial: Omit<ScrapeResult, 'markdown'> = {
     siteName,
     url: targetUrl,
