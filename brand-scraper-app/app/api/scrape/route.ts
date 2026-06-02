@@ -11,72 +11,19 @@ interface ScrapeResult {
   logos: string[];
   brandVoice: string;
   brandStory: string;
+  screenshotUrl: string;
   markdown: string;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-/** Normalise hex to uppercase 6-char form, return null if invalid. */
-function normaliseHex(raw: string): string | null {
-  let h = raw.replace('#', '').trim();
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  if (h.length !== 6) return null;
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
-  return '#' + h.toUpperCase();
+interface GeminiAnalysis {
+  brand_voice: string;
+  brand_story: string;
+  colors: string[];
+  fonts: string[];
 }
 
-/** Return true when the hex is near-black, near-white, or a generic gray. */
-function isNoise(hex: string): boolean {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  // near-black
-  if (r < 50 && g < 50 && b < 50) return true;
-  // near-white
-  if (r > 210 && g > 210 && b > 210) return true;
-  // gray: all channels within 15 of each other
-  if (Math.max(r, g, b) - Math.min(r, g, b) < 15) return true;
-  return false;
-}
+// ── Fetch helpers ──────────────────────────────────────────────────────────
 
-/** Extract hex colours from a CSS string, optionally only from :root / custom properties. */
-function extractColorsFromCss(css: string, customPropsOnly = false): string[] {
-  const results: string[] = [];
-  const source = customPropsOnly
-    ? (css.match(/:root\s*\{[\s\S]*?\}/g) || []).join('\n')
-    : css;
-  const matches = source.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g) || [];
-  for (const m of matches) {
-    const norm = normaliseHex(m);
-    if (norm && !isNoise(norm)) results.push(norm);
-  }
-  return results;
-}
-
-/** Extract font-family values from a CSS string. */
-function extractFontsFromCss(css: string): string[] {
-  const fonts: string[] = [];
-  // font-family: "Font Name", fallback
-  const re = /font-family\s*:\s*([^;}{]+)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(css)) !== null) {
-    const parts = m[1].split(',');
-    for (const part of parts) {
-      const name = part.trim().replace(/['"]/g, '').trim();
-      // skip generic families and variables
-      const skip = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
-        'inherit', 'initial', 'unset', '-apple-system', 'blinkmacsystemfont',
-        'segoe ui', 'helvetica', 'arial', 'times new roman', 'georgia', 'verdana',
-        'tahoma', 'trebuchet ms', 'impact', 'comic sans ms', 'courier new'];
-      if (name && !skip.includes(name.toLowerCase()) && name.length < 60) {
-        fonts.push(name);
-      }
-    }
-  }
-  return fonts;
-}
-
-/** Fetch HTML from a URL with a browser-like UA, return null on error. */
 async function fetchHtml(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
@@ -96,21 +43,22 @@ async function fetchHtml(url: string): Promise<string | null> {
   }
 }
 
-/** Fetch a CSS file (plain text), return empty string on error. */
-async function fetchCss(url: string): Promise<string> {
+async function fetchScreenshotAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+  // thum.io: free, no auth, returns a JPEG screenshot
+  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/png/${encodeURIComponent(url)}`;
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return '';
-    return await res.text();
+    const res = await fetch(screenshotUrl, { signal: AbortSignal.timeout(25000) });
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    const ct = res.headers.get('content-type') || 'image/jpeg';
+    const mimeType = ct.split(';')[0].trim();
+    return { data: base64, mimeType };
   } catch {
-    return '';
+    return null;
   }
 }
 
-/** Resolve a potentially relative URL against a base URL. */
 function resolveUrl(href: string, base: string): string | null {
   try {
     return new URL(href, base).href;
@@ -119,52 +67,157 @@ function resolveUrl(href: string, base: string): string | null {
   }
 }
 
-// ── Gemini ─────────────────────────────────────────────────────────────────
+// ── Google Fonts extraction ────────────────────────────────────────────────
 
-interface GeminiInsights {
-  brand_voice: string;
-  brand_story: string;
+function extractGoogleFonts(html: string): string[] {
+  const fonts: string[] = [];
+  const re = /fonts\.googleapis\.com\/css[^"']*[?&]family=([^"'&]+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    for (const fam of m[1].split('|')) {
+      const name = decodeURIComponent(fam.split(':')[0]).replace(/\+/g, ' ').trim();
+      if (name && !fonts.includes(name)) fonts.push(name);
+    }
+  }
+  return fonts;
 }
 
-async function callGemini(prompt: string): Promise<GeminiInsights> {
+// ── Logo detection from DOM ────────────────────────────────────────────────
+
+function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, parsedUrl: URL): string[] {
+  const logosSet = new Set<string>();
+  const logoPattern = /logo|brand|mark|emblem/i;
+
+  function addSrc(src: string) {
+    if (src && !src.startsWith('data:')) {
+      const abs = resolveUrl(src, targetUrl);
+      if (abs) logosSet.add(abs);
+    }
+  }
+
+  // Tier 1: imgs inside header/nav
+  $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]').find('img').each((_: number, el: any) => {
+    addSrc($(el).attr('src') || $(el).attr('data-src') || '');
+  });
+  if ($('header, nav, [class*="header"], [class*="navbar"], [role="banner"]').find('svg').length > 0) {
+    logosSet.add('[inline SVG logo in header/nav]');
+  }
+
+  // Tier 2: <a href="/"> wrapping img/svg
+  $('a').each((_: number, el: any) => {
+    const href = $(el).attr('href') || '';
+    if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
+      $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
+      if ($(el).find('svg').length > 0) logosSet.add('[inline SVG logo in home-link]');
+    }
+  });
+
+  // Tier 3: any img with logo-related keywords
+  if (logosSet.size === 0) {
+    $('img').each((_: number, el: any) => {
+      const src = $(el).attr('src') || '';
+      const signals = [src, $(el).attr('alt') || '', $(el).attr('class') || '', $(el).attr('id') || ''].join(' ');
+      if (logoPattern.test(signals)) addSrc(src);
+    });
+  }
+
+  // Tier 4: og:image
+  if (logosSet.size === 0) {
+    const ogImage = $('meta[property="og:image"]').attr('content') || '';
+    if (ogImage) {
+      const abs = resolveUrl(ogImage, targetUrl);
+      if (abs) logosSet.add(abs);
+    }
+  }
+
+  // Tier 5: favicon
+  if (logosSet.size === 0) {
+    $('link[rel*="icon"]').each((_: number, el: any) => {
+      const href = $(el).attr('href') || '';
+      if (href) {
+        const abs = resolveUrl(href, targetUrl);
+        if (abs) logosSet.add(abs);
+      }
+    });
+  }
+
+  return [...logosSet].slice(0, 5);
+}
+
+// ── Gemini vision analysis ─────────────────────────────────────────────────
+
+async function analyzeWithGemini(
+  screenshotB64: string,
+  mimeType: string,
+  pageText: string,
+  siteName: string,
+  targetUrl: string,
+  ogDescription: string,
+): Promise<GeminiAnalysis> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY environment variable is not set.');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  const prompt = `You are a brand analyst. You have been given a screenshot of a website plus its page text.
+
+Analyze the screenshot and text carefully, then return a JSON object with EXACTLY these four keys:
+
+1. "brand_voice": 2-4 sentences describing the brand's tone, personality, and communication style based on the visual design and copy.
+2. "brand_story": 3-5 sentences describing what this company does, its mission, and who it serves.
+3. "colors": An array of 3-8 hex color strings (e.g. "#1A2B3C") representing the brand's PRIMARY colors as visually rendered on the page — the most prominent and intentional colors you can see. Do NOT include near-white backgrounds or near-black text unless they are clearly a brand color choice. Focus on accent colors, button colors, logo colors, and hero section colors.
+4. "fonts": An array of 1-3 font name strings for the most prominent typefaces used in headings and body text (e.g. ["Inter", "Playfair Display"]).
+
+Website: ${targetUrl}
+Site name: ${siteName}
+Meta description: ${ogDescription}
+
+Page text (truncated):
+${pageText.slice(0, 3000)}
+
+Return ONLY valid JSON with no markdown fences:
+{"brand_voice":"...","brand_story":"...","colors":["#RRGGBB",...],"fonts":["..."]}`;
+
+  const body = {
+    contents: [{
+      parts: [
+        { inlineData: { mimeType, data: screenshotB64 } },
+        { text: prompt },
+      ],
+    }],
+    generationConfig: { temperature: 0.2 },
+  };
 
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
-    signal: AbortSignal.timeout(60000),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(90000),
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${body.slice(0, 300)}`);
+    const errBody = await res.text();
+    throw new Error(`Gemini ${res.status}: ${errBody.slice(0, 300)}`);
   }
 
   const data = await res.json();
   const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
-  // Try to parse JSON from the response (may be wrapped in markdown fences)
+  // Strip markdown fences if present
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[1].trim());
-      return {
-        brand_voice: parsed.brand_voice ?? parsed.brandVoice ?? '',
-        brand_story: parsed.brand_story ?? parsed.brandStory ?? '',
-      };
-    } catch {
-      // fall through to plain text
-    }
-  }
+  const jsonStr = jsonMatch ? jsonMatch[1].trim() : text.trim();
 
-  // Plain text fallback: split by headers if present
-  return { brand_voice: text, brand_story: '' };
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return {
+      brand_voice: parsed.brand_voice ?? parsed.brandVoice ?? '',
+      brand_story: parsed.brand_story ?? parsed.brandStory ?? '',
+      colors: Array.isArray(parsed.colors) ? parsed.colors.filter((c: unknown) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/i.test(c)) : [],
+      fonts: Array.isArray(parsed.fonts) ? parsed.fonts.slice(0, 3) : [],
+    };
+  } catch {
+    return { brand_voice: text, brand_story: '', colors: [], fonts: [] };
+  }
 }
 
 // ── Markdown builder ───────────────────────────────────────────────────────
@@ -195,27 +248,21 @@ function buildMarkdown(result: Omit<ScrapeResult, 'markdown'>): string {
   if (result.colors.length > 0) {
     lines.push('## Color Palette');
     lines.push('');
-    for (const c of result.colors) {
-      lines.push(`- \`${c}\``);
-    }
+    for (const c of result.colors) lines.push(`- \`${c}\``);
     lines.push('');
   }
 
   if (result.fonts.length > 0) {
     lines.push('## Typography');
     lines.push('');
-    for (const f of result.fonts) {
-      lines.push(`- ${f}`);
-    }
+    for (const f of result.fonts) lines.push(`- ${f}`);
     lines.push('');
   }
 
   if (result.logos.length > 0) {
     lines.push('## Logos & Icons');
     lines.push('');
-    for (const l of result.logos) {
-      lines.push(`- ${l}`);
-    }
+    for (const l of result.logos) lines.push(`- ${l}`);
     lines.push('');
   }
 
@@ -234,16 +281,12 @@ export async function POST(req: NextRequest) {
 
   const rawUrl = body?.url?.trim();
   if (!rawUrl) {
-    return NextResponse.json({ error: 'Missing "url" field in request body.' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing "url" field.' }, { status: 400 });
   }
 
-  // Ensure the URL has a protocol
   let targetUrl = rawUrl;
-  if (!/^https?:\/\//i.test(targetUrl)) {
-    targetUrl = 'https://' + targetUrl;
-  }
+  if (!/^https?:\/\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
 
-  // Validate URL
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(targetUrl);
@@ -251,196 +294,104 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Invalid URL: "${rawUrl}"` }, { status: 400 });
   }
 
-  // ── 1. Fetch page HTML ──────────────────────────────────────────────────
-  const html = await fetchHtml(targetUrl);
+  // ── 1. Fetch HTML and screenshot in parallel ────────────────────────────
+  const [html, screenshot] = await Promise.all([
+    fetchHtml(targetUrl),
+    fetchScreenshotAsBase64(targetUrl),
+  ]);
+
   if (!html) {
-    return NextResponse.json({ error: `Could not fetch the page at ${targetUrl}. The site may be blocking scrapers or is unreachable.` }, { status: 422 });
+    return NextResponse.json({ error: `Could not fetch ${targetUrl}. The site may be blocking scrapers.` }, { status: 422 });
   }
 
   const $ = cheerio.load(html);
 
-  // ── 2. Meta ─────────────────────────────────────────────────────────────
-  const title =
+  // ── 2. Site name + meta ─────────────────────────────────────────────────
+  const siteName = (
     $('meta[property="og:site_name"]').attr('content') ||
     $('title').first().text() ||
-    parsedUrl.hostname;
-
-  const siteName = title.trim().slice(0, 120) || parsedUrl.hostname;
-
-  // ── 3. Inline <style> blocks ────────────────────────────────────────────
-  let inlineCss = '';
-  $('style').each((_, el) => {
-    inlineCss += $(el).text() + '\n';
-  });
-
-  const fontsSet = new Set<string>(extractFontsFromCss(inlineCss));
-
-  // ── 4. Fetch linked stylesheets (up to 3, skip Google Fonts) ────────────
-  const cssLinks: string[] = [];
-  $('link[rel="stylesheet"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    if (!href.includes('fonts.googleapis.com') && cssLinks.length < 3) {
-      const abs = resolveUrl(href, targetUrl);
-      if (abs) cssLinks.push(abs);
-    }
-  });
-
-  const externalCssParts: string[] = [];
-  await Promise.all(cssLinks.map(async (cssUrl) => {
-    const css = await fetchCss(cssUrl);
-    if (css) {
-      externalCssParts.push(css);
-      for (const f of extractFontsFromCss(css)) fontsSet.add(f);
-    }
-  }));
-  const externalCss = externalCssParts.join('\n');
-  const allCss = inlineCss + '\n' + externalCss;
-
-  // ── 5. Google Fonts from <link> tags ────────────────────────────────────
-  $('link[rel="stylesheet"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    if (href.includes('fonts.googleapis.com')) {
-      const match = href.match(/[?&]family=([^&]+)/);
-      if (match) {
-        for (const fam of match[1].split('|')) {
-          const name = decodeURIComponent(fam.split(':')[0]).replace(/\+/g, ' ').trim();
-          if (name) fontsSet.add(name);
-        }
-      }
-    }
-  });
-
-  // ── 6. Color extraction — layered with fallbacks ─────────────────────────
-  // Tier 1: CSS custom properties in :root (most intentional brand colors)
-  const colorsSet = new Set<string>(extractColorsFromCss(allCss, true));
-
-  // Tier 2: inline style attributes on prominent elements
-  $('header, nav, [class*="hero"], [class*="banner"], [id*="hero"], [id*="banner"], h1, h2').each((_, el) => {
-    const style = $(el).attr('style') || '';
-    if (style) for (const c of extractColorsFromCss(style)) colorsSet.add(c);
-  });
-
-  // Tier 3: if still nothing, scan all inline <style> blocks
-  if (colorsSet.size === 0) {
-    for (const c of extractColorsFromCss(inlineCss)) colorsSet.add(c);
-  }
-
-  // Tier 4: if still nothing, scan all external CSS (accept more noise as last resort)
-  if (colorsSet.size === 0) {
-    for (const c of extractColorsFromCss(externalCss)) colorsSet.add(c);
-  }
-
-  // ── 7. Logo detection — layered with fallbacks ───────────────────────────
-  const logosSet = new Set<string>();
-  const logoPattern = /logo|brand|mark|emblem/i;
-
-  function addSrc(src: string) {
-    if (src && !src.startsWith('data:')) {
-      const abs = resolveUrl(src, targetUrl);
-      if (abs) logosSet.add(abs);
-    }
-  }
-
-  // Tier 1: <img>/<svg> inside header/nav (including class-based variants)
-  $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]').find('img').each((_: number, el: any) => {
-    addSrc($(el).attr('src') || $(el).attr('data-src') || '');
-  });
-  const hasNavSvg = $('header, nav, [class*="header"], [class*="navbar"], [role="banner"]').find('svg').length > 0;
-  if (hasNavSvg) logosSet.add('[inline SVG in header/nav]');
-
-  // Tier 2: <a href="/"> wrapping an img or svg (common logo-link pattern)
-  $('a').each((_: number, el: any) => {
-    const href = $(el).attr('href') || '';
-    if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
-      $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
-      if ($(el).find('svg').length > 0) logosSet.add('[inline SVG in home-link]');
-    }
-  });
-
-  // Tier 3: any img whose src/alt/class/id contains logo-related keywords
-  if (logosSet.size === 0) {
-    $('img').each((_: number, el: any) => {
-      const src = $(el).attr('src') || '';
-      const signals = [src, $(el).attr('alt') || '', $(el).attr('class') || '', $(el).attr('id') || ''].join(' ');
-      if (logoPattern.test(signals)) addSrc(src);
-    });
-  }
-
-  // Tier 4: og:image meta tag
-  if (logosSet.size === 0) {
-    const ogImage = $('meta[property="og:image"]').attr('content') || '';
-    if (ogImage) {
-      const abs = resolveUrl(ogImage, targetUrl);
-      if (abs) logosSet.add(abs);
-    }
-  }
-
-  // Tier 5: favicon (last resort)
-  if (logosSet.size === 0) {
-    $('link[rel*="icon"]').each((_: number, el: any) => {
-      const href = $(el).attr('href') || '';
-      if (href) {
-        const abs = resolveUrl(href, targetUrl);
-        if (abs) logosSet.add(abs);
-      }
-    });
-  }
-
-  // ── 6. Page text (stripped) ─────────────────────────────────────────────
-  $('script, style, noscript, iframe, nav, footer, header').remove();
-  const bodyText = $('body')
-    .text()
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 6000);
+    parsedUrl.hostname
+  ).trim().slice(0, 120);
 
   const ogDescription =
     $('meta[property="og:description"]').attr('content') ||
-    $('meta[name="description"]').attr('content') ||
-    '';
+    $('meta[name="description"]').attr('content') || '';
 
-  // ── 7. Gemini call ──────────────────────────────────────────────────────
-  const prompt = `You are a brand analyst. Analyse the following website content and return a JSON object with exactly two keys:
-- "brand_voice": A paragraph describing the brand's tone, communication style, and personality (2-4 sentences).
-- "brand_story": A paragraph describing what the company does, its mission/values, and who it serves (3-5 sentences).
+  // ── 3. Page text ────────────────────────────────────────────────────────
+  $('script, style, noscript, iframe').remove();
+  const pageText = $('body').text().replace(/\s+/g, ' ').trim();
 
+  // ── 4. Logo (DOM) ───────────────────────────────────────────────────────
+  const logos = extractLogos($, targetUrl, parsedUrl);
+
+  // ── 5. Google Fonts (DOM) ───────────────────────────────────────────────
+  const googleFonts = extractGoogleFonts(html);
+
+  // ── 6. Gemini vision analysis ───────────────────────────────────────────
+  let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', colors: [], fonts: [] };
+
+  if (screenshot) {
+    try {
+      analysis = await analyzeWithGemini(
+        screenshot.data,
+        screenshot.mimeType,
+        pageText,
+        siteName,
+        targetUrl,
+        ogDescription,
+      );
+    } catch (err) {
+      console.error('Gemini vision error:', err);
+    }
+  } else {
+    // Screenshot failed — fall back to text-only Gemini call
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const prompt = `Analyze this website and return JSON with keys brand_voice (2-4 sentences), brand_story (3-5 sentences), colors (empty array), fonts (empty array).
 Website: ${targetUrl}
-Site name: ${siteName}
-Meta description: ${ogDescription}
-
-Page content (truncated to 6000 chars):
-${bodyText}
-
-Return ONLY valid JSON, no markdown fences, no extra text:
-{"brand_voice": "...", "brand_story": "..."}`;
-
-  let geminiResult: GeminiInsights = { brand_voice: '', brand_story: '' };
-  try {
-    geminiResult = await callGemini(prompt);
-  } catch (err) {
-    // Non-fatal — return partial results with an empty voice/story
-    console.error('Gemini error:', err);
+Text: ${pageText.slice(0, 5000)}
+Return ONLY JSON: {"brand_voice":"...","brand_story":"...","colors":[],"fonts":[]}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+          signal: AbortSignal.timeout(60000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
+          if (m) {
+            const parsed = JSON.parse(m[1].trim());
+            analysis.brand_voice = parsed.brand_voice ?? '';
+            analysis.brand_story = parsed.brand_story ?? '';
+          }
+        }
+      } catch (err) {
+        console.error('Gemini text fallback error:', err);
+      }
+    }
   }
 
-  // ── 8. Deduplicate and cap ──────────────────────────────────────────────
-  const colors = [...colorsSet].slice(0, 20);
-  const fonts = [...fontsSet].slice(0, 15);
-  const logos = [...logosSet].slice(0, 8);
+  // ── 7. Merge fonts: Gemini visual + Google Fonts from DOM ───────────────
+  const fonts = [...new Set([...analysis.fonts, ...googleFonts])].slice(0, 4);
 
-  // ── 9. Build result ─────────────────────────────────────────────────────
+  // ── 8. Build result ─────────────────────────────────────────────────────
+  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/png/${encodeURIComponent(targetUrl)}`;
+
   const partial: Omit<ScrapeResult, 'markdown'> = {
     siteName,
     url: targetUrl,
-    colors,
+    colors: analysis.colors,
     fonts,
     logos,
-    brandVoice: geminiResult.brand_voice,
-    brandStory: geminiResult.brand_story,
+    brandVoice: analysis.brand_voice,
+    brandStory: analysis.brand_story,
+    screenshotUrl,
   };
 
   const markdown = buildMarkdown(partial);
-
-  const result: ScrapeResult = { ...partial, markdown };
-
-  return NextResponse.json(result);
+  return NextResponse.json({ ...partial, markdown });
 }

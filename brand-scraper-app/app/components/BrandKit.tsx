@@ -8,6 +8,7 @@ interface BrandResult {
   logos: string[];
   brandVoice: string;
   brandStory: string;
+  screenshotUrl?: string;
   markdown: string;
 }
 
@@ -31,10 +32,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function BrandKit({ result }: Props) {
-  const { colors, fonts, logos, brandVoice, brandStory } = result;
+  const { colors, fonts, logos, brandVoice, brandStory, screenshotUrl } = result;
 
   return (
     <div className="grid grid-cols-1 gap-0">
+      {/* Screenshot */}
+      {screenshotUrl && (
+        <Section title="Page Screenshot">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={screenshotUrl}
+            alt="Website screenshot"
+            className="w-full rounded-xl border border-gray-700 object-cover"
+          />
+        </Section>
+      )}
+
       {/* Brand Story */}
       {brandStory && (
         <Section title="Brand Story">
