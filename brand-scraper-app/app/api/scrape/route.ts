@@ -361,22 +361,22 @@ async function analyzeWithGemini(
     ? 'the screenshot (most accurate) and the candidate list as a reference'
     : 'the CANDIDATE COLORS list extracted from CSS and inline styles';
 
-  const prompt = `You are a brand analyst. Analyze the website data below to extract brand identity.
-${hasScreenshot ? 'A rendered screenshot of the page is attached — use it as your primary source for colors and fonts.' : ''}
+  const prompt = `You are a brand analyst extracting the complete color palette from a website screenshot.
+${hasScreenshot ? 'A full-page rendered screenshot is attached. Use it as your ONLY source for colors and fonts — look at every pixel.' : ''}
 
 Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "primary_colors": Array of 1-3 hex strings for the brand's MAIN colors — dominant backgrounds and the single most prominent brand color. Derive from ${colorSource}.
-4. "accent_colors": Array of 3-8 hex strings for secondary colors — CTAs, highlights, gradients, decorative elements, hover states. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional. Cast a wide net — include teal, mint, sage, warm grays, and any other colors that appear consistently. Derive from ${colorSource}.
-5. "fonts": Array of 1-4 font names as their REAL published names (not CSS identifiers). Examples of conversions: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim", "neue-haas-grotesk" → "Neue Haas Grotesk", "editorial-new" → "PP Editorial New", "pp-neue-montreal" → "PP Neue Montreal". If you don't recognise the CSS name, clean it up by removing hyphens, capitalising words, and removing weight suffixes like -bold/-regular/-medium. If none detected return [].
+3. "primary_colors": Array of 1-3 hex strings for dominant background/base colors (e.g. black, white, navy).
+4. "accent_colors": Array of 4-8 hex strings for EVERY distinct color visible in graphics, illustrations, gradients, CTAs, and decorative elements. If you see a spectrum or multi-color graphic (e.g. semicircles, waves, gradient bands), extract EACH individual color from it. Be exhaustive — include teals, olives, oranges, reds, burgundies, warm tones, cool tones. EXCLUDE colors that are within 15 hex points of pure black (#000000) or pure white (#FFFFFF).
+5. "fonts": Array of 1-3 font names as their REAL published names. Convert CSS identifiers: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". Return only distinct typeface families (not weights). If none detected return [].
 
 Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-CANDIDATE COLORS (from CSS/inline styles):
+CANDIDATE COLORS (from CSS/SVG — use as hints only, screenshot takes priority):
 ${allHexColors.slice(0, 300).join(', ')}
 
 CANDIDATE FONTS:
