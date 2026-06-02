@@ -113,6 +113,7 @@ export default function BrandKit({ result }: Props) {
                 <div key={logoUrl} className="flex flex-col items-center gap-2">
                   <div
                     className="rounded-xl bg-black p-4 max-h-24 max-w-[180px] overflow-hidden flex items-center justify-center [&_svg]:max-h-16 [&_svg]:max-w-[140px] [&_svg]:h-auto [&_svg]:w-auto"
+                    style={{ color: 'white' }}
                     dangerouslySetInnerHTML={{ __html: atob(logoUrl.split('base64,')[1] || '') }}
                   />
                   <span className="text-xs text-gray-500">logo.svg</span>

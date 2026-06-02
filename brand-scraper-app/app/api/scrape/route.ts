@@ -458,6 +458,10 @@ export async function POST(req: NextRequest) {
 
   // ── 6. Logo (DOM) ───────────────────────────────────────────────────────
   const logos = extractLogos($, targetUrl, parsedUrl);
+  console.log('[logos]', logos.map(l => l.startsWith('data:') ? l.slice(0, 80) : l));
+  // Log nav/header structure to diagnose logo detection
+  const navHtml = $('header, nav, [class*="header"], [class*="navbar"]').html() || '';
+  console.log('[nav-html-snippet]', navHtml.slice(0, 1000));
 
   // ── 7. Page text ────────────────────────────────────────────────────────
   $('script, style, noscript, iframe').remove();
