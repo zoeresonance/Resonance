@@ -275,38 +275,28 @@ export async function POST(req: NextRequest) {
 
   const fontsSet = new Set<string>(extractFontsFromCss(inlineCss));
 
-  // Priority 1: CSS custom properties in :root — most reliable brand colors
-  const rootColors = new Set<string>(extractColorsFromCss(inlineCss, true));
-
-  // Priority 2: inline style attributes on header/nav/hero elements
-  const prominentColors = new Set<string>();
-  $('header, nav, [class*="hero"], [class*="banner"], [id*="hero"], [id*="banner"], h1, h2').each((_, el) => {
-    const style = $(el).attr('style') || '';
-    if (style) {
-      for (const c of extractColorsFromCss(style)) prominentColors.add(c);
-    }
-  });
-
-  // Priority 3: CSS custom properties from the first linked stylesheet only
+  // ── 4. Fetch linked stylesheets (up to 3, skip Google Fonts) ────────────
   const cssLinks: string[] = [];
   $('link[rel="stylesheet"]').each((_, el) => {
     const href = $(el).attr('href') || '';
-    if (!href.includes('fonts.googleapis.com') && cssLinks.length < 1) {
+    if (!href.includes('fonts.googleapis.com') && cssLinks.length < 3) {
       const abs = resolveUrl(href, targetUrl);
       if (abs) cssLinks.push(abs);
     }
   });
 
-  const externalRootColors = new Set<string>();
-  if (cssLinks.length > 0) {
-    const css = await fetchCss(cssLinks[0]);
+  const externalCssParts: string[] = [];
+  await Promise.all(cssLinks.map(async (cssUrl) => {
+    const css = await fetchCss(cssUrl);
     if (css) {
-      for (const c of extractColorsFromCss(css, true)) externalRootColors.add(c);
+      externalCssParts.push(css);
       for (const f of extractFontsFromCss(css)) fontsSet.add(f);
     }
-  }
+  }));
+  const externalCss = externalCssParts.join('\n');
+  const allCss = inlineCss + '\n' + externalCss;
 
-  // ── 4. Google Fonts from <link> tags ────────────────────────────────────
+  // ── 5. Google Fonts from <link> tags ────────────────────────────────────
   $('link[rel="stylesheet"]').each((_, el) => {
     const href = $(el).attr('href') || '';
     if (href.includes('fonts.googleapis.com')) {
@@ -320,54 +310,74 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  // Merge colors: root vars first, then prominent element colors, then external root vars
-  const colorsSet = new Set<string>([...rootColors, ...prominentColors, ...externalRootColors]);
+  // ── 6. Color extraction — layered with fallbacks ─────────────────────────
+  // Tier 1: CSS custom properties in :root (most intentional brand colors)
+  const colorsSet = new Set<string>(extractColorsFromCss(allCss, true));
 
-  // ── 5. Logo detection ───────────────────────────────────────────────────
+  // Tier 2: inline style attributes on prominent elements
+  $('header, nav, [class*="hero"], [class*="banner"], [id*="hero"], [id*="banner"], h1, h2').each((_, el) => {
+    const style = $(el).attr('style') || '';
+    if (style) for (const c of extractColorsFromCss(style)) colorsSet.add(c);
+  });
+
+  // Tier 3: if still nothing, scan all inline <style> blocks
+  if (colorsSet.size === 0) {
+    for (const c of extractColorsFromCss(inlineCss)) colorsSet.add(c);
+  }
+
+  // Tier 4: if still nothing, scan all external CSS (accept more noise as last resort)
+  if (colorsSet.size === 0) {
+    for (const c of extractColorsFromCss(externalCss)) colorsSet.add(c);
+  }
+
+  // ── 7. Logo detection — layered with fallbacks ───────────────────────────
   const logosSet = new Set<string>();
   const logoPattern = /logo|brand|mark|emblem/i;
 
-  // Priority 1: <img> or <svg> inside <header> or <nav>
-  $('header, nav').find('img, svg').each((_, el) => {
-    if (el.type === 'tag' && el.name === 'img') {
-      const src = $(el).attr('src') || $(el).attr('data-src') || '';
-      if (src && !src.startsWith('data:')) {
-        const abs = resolveUrl(src, targetUrl);
-        if (abs) logosSet.add(abs);
-      }
-    } else if (el.type === 'tag' && el.name === 'svg') {
-      logosSet.add('[inline SVG logo in header/nav]');
+  function addSrc(src: string) {
+    if (src && !src.startsWith('data:')) {
+      const abs = resolveUrl(src, targetUrl);
+      if (abs) logosSet.add(abs);
+    }
+  }
+
+  // Tier 1: <img>/<svg> inside header/nav (including class-based variants)
+  $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]').find('img').each((_: number, el: any) => {
+    addSrc($(el).attr('src') || $(el).attr('data-src') || '');
+  });
+  const hasNavSvg = $('header, nav, [class*="header"], [class*="navbar"], [role="banner"]').find('svg').length > 0;
+  if (hasNavSvg) logosSet.add('[inline SVG in header/nav]');
+
+  // Tier 2: <a href="/"> wrapping an img or svg (common logo-link pattern)
+  $('a').each((_: number, el: any) => {
+    const href = $(el).attr('href') || '';
+    if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
+      $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
+      if ($(el).find('svg').length > 0) logosSet.add('[inline SVG in home-link]');
     }
   });
 
-  // Priority 2: <a href="/"> containing an img or svg (common logo wrapper pattern)
-  $('a[href="/"], a[href="' + targetUrl + '"]').each((_, el) => {
-    $(el).find('img').each((_2, img) => {
-      const src = $(img).attr('src') || '';
-      if (src && !src.startsWith('data:')) {
-        const abs = resolveUrl(src, targetUrl);
-        if (abs) logosSet.add(abs);
-      }
-    });
-    if ($(el).find('svg').length > 0) logosSet.add('[inline SVG logo in home link]');
-  });
-
-  // Priority 3: any <img> anywhere whose src/alt/class/id hints at logo
+  // Tier 3: any img whose src/alt/class/id contains logo-related keywords
   if (logosSet.size === 0) {
-    $('img').each((_, el) => {
+    $('img').each((_: number, el: any) => {
       const src = $(el).attr('src') || '';
-      const alt = $(el).attr('alt') || '';
-      const cls = ($(el).attr('class') || '') + ' ' + ($(el).attr('id') || '');
-      if (logoPattern.test(src) || logoPattern.test(alt) || logoPattern.test(cls)) {
-        const abs = resolveUrl(src, targetUrl);
-        if (abs && !src.startsWith('data:')) logosSet.add(abs);
-      }
+      const signals = [src, $(el).attr('alt') || '', $(el).attr('class') || '', $(el).attr('id') || ''].join(' ');
+      if (logoPattern.test(signals)) addSrc(src);
     });
   }
 
-  // Last resort: favicon
+  // Tier 4: og:image meta tag
   if (logosSet.size === 0) {
-    $('link[rel*="icon"]').each((_, el) => {
+    const ogImage = $('meta[property="og:image"]').attr('content') || '';
+    if (ogImage) {
+      const abs = resolveUrl(ogImage, targetUrl);
+      if (abs) logosSet.add(abs);
+    }
+  }
+
+  // Tier 5: favicon (last resort)
+  if (logosSet.size === 0) {
+    $('link[rel*="icon"]').each((_: number, el: any) => {
       const href = $(el).attr('href') || '';
       if (href) {
         const abs = resolveUrl(href, targetUrl);
