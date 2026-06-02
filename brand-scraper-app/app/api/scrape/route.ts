@@ -140,21 +140,20 @@ function resolveUrl(href: string, base: string): string | null {
 
 // ── Color / font extraction ────────────────────────────────────────────────
 
-function hexFromText(text: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+function hexFrequency(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
   const re = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     let h = m[1];
     if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     const hex = '#' + h.toUpperCase();
-    if (!seen.has(hex)) { seen.add(hex); out.push(hex); }
+    counts.set(hex, (counts.get(hex) || 0) + 1);
   }
-  return out;
+  return counts;
 }
 
-/** Extract hex colors from CSS, inline styles, and SVG fill/stroke attributes. */
+/** Extract hex colors from CSS, inline styles, and SVG fill/stroke — sorted by frequency. */
 function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: string): string[] {
   const sources: string[] = [];
 
@@ -167,7 +166,7 @@ function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: 
     if (tag !== 'script' && tag !== 'style') sources.push($(el).attr('style') || '');
   });
 
-  // 3. SVG fill and stroke attributes (catches graphic elements like the semicircle animation)
+  // 3. SVG fill and stroke attributes
   $('[fill],[stroke]').each((_: number, el: any) => {
     const fill = $(el).attr('fill') || '';
     const stroke = $(el).attr('stroke') || '';
@@ -178,7 +177,11 @@ function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: 
   // 4. External CSS
   sources.push(externalCss);
 
-  return hexFromText(sources.join('\n'));
+  // Sort by frequency descending so the most-used colors appear first
+  const freq = hexFrequency(sources.join('\n'));
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([hex]) => hex);
 }
 
 function extractFontFamilies(css: string): string[] {
@@ -388,7 +391,7 @@ Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-CANDIDATE COLORS (ONLY return values from this exact list):
+CANDIDATE COLORS (sorted by frequency of use on the page — colors near the top appear more often in CSS and are more likely to be brand colors; ONLY return values from this exact list):
 ${allHexColors.slice(0, 300).join(', ')}
 
 CANDIDATE FONTS:
