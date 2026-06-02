@@ -370,7 +370,7 @@ Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "primary_colors": Array of 1-3 hex values FROM THE CANDIDATE LIST for dominant background/base colors.
+3. "primary_colors": Array of 1-3 hex values FROM THE CANDIDATE LIST. Include the dominant background color AND the most distinctive brand color (e.g. a specific blue, green, or accent used in buttons or key UI elements). Do not list more than one near-black or more than one near-white — if both are present, find a third distinctive color instead.
 4. "accent_colors": Array of 4-8 hex values FROM THE CANDIDATE LIST. Include warm and cool tones visible in graphics, illustrations, and CTAs. EXCLUDE values where all RGB channels are below 50 or above 210.
 5. "fonts": Array of 1-3 font names as REAL published names. Convert: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". One entry per typeface family. Return [] if none found.
 
@@ -530,10 +530,13 @@ export async function POST(req: NextRequest) {
   // ── 5. Google Fonts ─────────────────────────────────────────────────────
   const googleFonts = extractGoogleFonts(html);
 
-  // ── 6. Logo — use header screenshot crop if available, otherwise fall back to DOM
-  const logos: string[] = headerScreenshot
-    ? [`data:${headerScreenshot.mimeType};base64,${headerScreenshot.data}`]
-    : extractLogos($, targetUrl, parsedUrl);
+  // ── 6. Logo — DOM extraction first, header screenshot as fallback only
+  const domLogos = extractLogos($, targetUrl, parsedUrl);
+  const logos: string[] = domLogos.length > 0
+    ? domLogos
+    : headerScreenshot
+      ? [`data:${headerScreenshot.mimeType};base64,${headerScreenshot.data}`]
+      : [];
 
   // ── 7. Page text ────────────────────────────────────────────────────────
   $('script, style, noscript, iframe').remove();
