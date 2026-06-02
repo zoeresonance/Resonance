@@ -105,52 +105,18 @@ export default function BrandKit({ result }: Props) {
 
       {/* Logos */}
       {logos.length > 0 && (
-        <Section title={`Logos & Icons (${logos.length})`}>
+        <Section title="Logo">
           <div className="flex flex-wrap gap-6 items-start">
-            {logos.map((logoUrl) =>
-              logoUrl.startsWith('data:image/svg') ? (
-                // Inline SVG rendered directly from base64
-                <div key={logoUrl} className="flex flex-col items-center gap-2">
-                  <div
-                    className="rounded-xl bg-black p-4 max-h-24 max-w-[180px] overflow-hidden flex items-center justify-center [&_svg]:max-h-16 [&_svg]:max-w-[140px] [&_svg]:h-auto [&_svg]:w-auto"
-                    style={{ color: 'white' }}
-                    dangerouslySetInnerHTML={{ __html: atob(logoUrl.split('base64,')[1] || '') }}
-                  />
-                  <span className="text-xs text-gray-500">logo.svg</span>
-                </div>
-              ) : isImageUrl(logoUrl) ? (
-                <div key={logoUrl} className="flex flex-col items-center gap-2">
-                  <div className="rounded-xl bg-white p-3 shadow border border-gray-200/10">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={logoUrl}
-                      alt="Logo"
-                      className="max-h-16 max-w-[120px] object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  </div>
-                  <a href={logoUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 max-w-[140px] truncate" title={logoUrl}>
-                    {logoLabel(logoUrl)}
-                  </a>
-                </div>
-              ) : (
-                <div key={logoUrl} className="flex flex-col items-center gap-2">
-                  <div className="rounded-xl bg-gray-800 border border-gray-700 px-4 py-3 text-gray-400 text-sm">
-                    Non-image asset
-                  </div>
-                  <a
-                    href={logoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 max-w-[200px] truncate"
-                    title={logoUrl}
-                  >
-                    {logoUrl}
-                  </a>
-                </div>
-              )
-            )}
+            {logos.map((logoUrl) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={logoUrl}
+                src={logoUrl}
+                alt="Logo"
+                className="max-h-24 rounded-xl object-contain"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ))}
           </div>
         </Section>
       )}

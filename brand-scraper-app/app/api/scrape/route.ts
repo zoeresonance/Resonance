@@ -50,7 +50,7 @@ async function fetchRenderedHtml(url: string): Promise<string | null> {
   return fetchStaticHtml(url);
 }
 
-/** Get a screenshot as base64 via Browserless. Returns null on failure. */
+/** Full-page screenshot for Gemini visual analysis. */
 async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: string } | null> {
   const token = process.env.BROWSERLESS_API_KEY;
   if (!token) return null;
@@ -61,7 +61,7 @@ async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: s
       body: JSON.stringify({
         url,
         waitForTimeout: 2000,
-        options: { type: 'jpeg', quality: 80 },
+        options: { type: 'jpeg', quality: 85 },
         viewport: { width: 1280, height: 900 },
       }),
       signal: AbortSignal.timeout(35000),
@@ -74,6 +74,31 @@ async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: s
     return { data: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' };
   } catch (err) {
     console.error('Browserless screenshot error:', err);
+    return null;
+  }
+}
+
+/** Header-only screenshot (top 120px) to capture the logo/navbar. */
+async function fetchHeaderScreenshot(url: string): Promise<{ data: string; mimeType: string } | null> {
+  const token = process.env.BROWSERLESS_API_KEY;
+  if (!token) return null;
+  try {
+    const res = await fetch(`${BROWSERLESS_BASE}/chromium/screenshot?token=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        waitForTimeout: 2000,
+        options: { type: 'png', clip: { x: 0, y: 0, width: 1280, height: 120 } },
+        viewport: { width: 1280, height: 900 },
+      }),
+      signal: AbortSignal.timeout(35000),
+    });
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    return { data: Buffer.from(buffer).toString('base64'), mimeType: 'image/png' };
+  } catch (err) {
+    console.error('Browserless header screenshot error:', err);
     return null;
   }
 }
@@ -455,11 +480,11 @@ export async function POST(req: NextRequest) {
   try { parsedUrl = new URL(targetUrl); }
   catch { return NextResponse.json({ error: `Invalid URL: "${rawUrl}"` }, { status: 400 }); }
 
-  // ── 1. Fetch HTML ───────────────────────────────────────────────────────
-  // ── 1. Fetch rendered HTML + screenshot in parallel (Browserless) ─────────
-  const [html, screenshot] = await Promise.all([
+  // ── 1. Fetch rendered HTML + screenshots in parallel (Browserless) ──────
+  const [html, screenshot, headerScreenshot] = await Promise.all([
     fetchRenderedHtml(targetUrl),
     fetchScreenshot(targetUrl),
+    fetchHeaderScreenshot(targetUrl),
   ]);
   if (!html) return NextResponse.json({ error: `Could not fetch ${targetUrl}.` }, { status: 422 });
 
@@ -499,8 +524,10 @@ export async function POST(req: NextRequest) {
   // ── 5. Google Fonts ─────────────────────────────────────────────────────
   const googleFonts = extractGoogleFonts(html);
 
-  // ── 6. Logo (DOM) ───────────────────────────────────────────────────────
-  const logos = extractLogos($, targetUrl, parsedUrl);
+  // ── 6. Logo — use header screenshot crop if available, otherwise fall back to DOM
+  const logos: string[] = headerScreenshot
+    ? [`data:${headerScreenshot.mimeType};base64,${headerScreenshot.data}`]
+    : extractLogos($, targetUrl, parsedUrl);
 
   // ── 7. Page text ────────────────────────────────────────────────────────
   $('script, style, noscript, iframe').remove();
