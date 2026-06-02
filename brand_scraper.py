@@ -7,8 +7,8 @@ Usage:
     python3 brand_scraper.py <url> [output_file.md]
 
 Requires:
-    pip install requests beautifulsoup4 anthropic lxml
-    ANTHROPIC_API_KEY environment variable
+    pip install requests beautifulsoup4 google-genai lxml
+    GEMINI_API_KEY environment variable
 """
 
 import re
@@ -22,10 +22,10 @@ import requests
 from bs4 import BeautifulSoup
 
 try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
+    from google import genai
+    GEMINI_AVAILABLE = True
 except ImportError:
-    ANTHROPIC_AVAILABLE = False
+    GEMINI_AVAILABLE = False
 
 
 HEADERS = {
@@ -206,15 +206,15 @@ def extract_meta(soup: BeautifulSoup) -> dict:
 
 # ─── AI analysis ──────────────────────────────────────────────────────────────
 
-def analyze_with_claude(page_text: str, meta: dict, url: str) -> dict:
-    if not ANTHROPIC_AVAILABLE:
-        return {"brand_voice": "N/A (anthropic package not installed)", "brand_story": "N/A"}
+def analyze_with_gemini(page_text: str, meta: dict, url: str) -> dict:
+    if not GEMINI_AVAILABLE:
+        return {"brand_voice": "N/A (google-genai package not installed)", "brand_story": "N/A"}
 
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
-        return {"brand_voice": "N/A (ANTHROPIC_API_KEY not set)", "brand_story": "N/A"}
+        return {"brand_voice": "N/A (GEMINI_API_KEY not set)", "brand_story": "N/A"}
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
     meta_str = json.dumps(meta, indent=2)
     prompt = f"""You are a brand strategist. Analyze the website content below and extract:
@@ -236,13 +236,12 @@ Respond in this exact JSON format:
   "brand_story": "..."
 }}"""
 
-    message = client.messages.create(
-        model="claude-opus-4-8",
-        max_tokens=600,
-        messages=[{"role": "user", "content": prompt}]
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
     )
 
-    raw = message.content[0].text.strip()
+    raw = response.text.strip()
     # Extract JSON even if wrapped in markdown code fences
     json_match = re.search(r'\{.*\}', raw, re.DOTALL)
     if json_match:
@@ -347,8 +346,8 @@ def scrape(url: str, output_path: str | None = None) -> str:
     page_text = extract_page_text(soup)
     meta = extract_meta(soup)
 
-    print("Analyzing brand voice & story with Claude …")
-    ai = analyze_with_claude(page_text, meta, final_url)
+    print("Analyzing brand voice & story with Gemini …")
+    ai = analyze_with_gemini(page_text, meta, final_url)
 
     print("Building markdown …")
     md = build_markdown(final_url, meta, colors, fonts, logos, ai)
