@@ -43,17 +43,36 @@ async function fetchHtml(url: string): Promise<string | null> {
 }
 
 async function fetchScreenshotAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
-  // thum.io: free, no auth, returns a JPEG screenshot
-  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/${encodeURIComponent(url)}`;
+  // Microlink: free tier, reliable from server-side, returns JSON with screenshot URL
   try {
-    const res = await fetch(screenshotUrl, { signal: AbortSignal.timeout(25000) });
-    if (!res.ok) return null;
-    const buffer = await res.arrayBuffer();
+    // Step 1: get the screenshot image URL from Microlink
+    const metaRes = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false`, {
+      headers: { 'x-api-key': '' },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!metaRes.ok) {
+      console.error('Microlink meta fetch failed:', metaRes.status);
+      return null;
+    }
+    const metaJson = await metaRes.json();
+    const imgUrl: string | undefined = metaJson?.data?.screenshot?.url;
+    if (!imgUrl) {
+      console.error('Microlink returned no screenshot URL:', JSON.stringify(metaJson).slice(0, 200));
+      return null;
+    }
+
+    // Step 2: fetch the actual image bytes
+    const imgRes = await fetch(imgUrl, { signal: AbortSignal.timeout(20000) });
+    if (!imgRes.ok) {
+      console.error('Screenshot image fetch failed:', imgRes.status);
+      return null;
+    }
+    const buffer = await imgRes.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
-    const ct = res.headers.get('content-type') || 'image/jpeg';
-    const mimeType = ct.split(';')[0].trim();
-    return { data: base64, mimeType };
-  } catch {
+    const ct = imgRes.headers.get('content-type') || 'image/jpeg';
+    return { data: base64, mimeType: ct.split(';')[0].trim() };
+  } catch (err) {
+    console.error('fetchScreenshotAsBase64 error:', err);
     return null;
   }
 }
