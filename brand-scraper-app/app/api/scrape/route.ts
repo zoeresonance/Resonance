@@ -129,7 +129,7 @@ function hexFromText(text: string): string[] {
   return out;
 }
 
-/** Extract hex colors ONLY from CSS and inline style attributes — never from script content. */
+/** Extract hex colors from CSS, inline styles, and SVG fill/stroke attributes. */
 function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: string): string[] {
   const sources: string[] = [];
 
@@ -142,7 +142,15 @@ function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: 
     if (tag !== 'script' && tag !== 'style') sources.push($(el).attr('style') || '');
   });
 
-  // 3. External CSS
+  // 3. SVG fill and stroke attributes (catches graphic elements like the semicircle animation)
+  $('[fill],[stroke]').each((_: number, el: any) => {
+    const fill = $(el).attr('fill') || '';
+    const stroke = $(el).attr('stroke') || '';
+    if (fill.startsWith('#')) sources.push(fill);
+    if (stroke.startsWith('#')) sources.push(stroke);
+  });
+
+  // 4. External CSS
   sources.push(externalCss);
 
   return hexFromText(sources.join('\n'));
