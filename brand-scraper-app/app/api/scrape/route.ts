@@ -198,33 +198,44 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
   function addInlineSvg(el: any) {
     const svgHtml = $.html(el) as string;
     if (!svgHtml || svgHtml.length < 10 || svgHtml.length > 100000) return;
-    // Prefer landscape SVGs (wordmarks) — skip small square/portrait icons
+    // Only skip clearly portrait/tall icons (h > 2× w) — allow squares and landscape
     const vb = $(el).attr('viewBox') || '';
     const w = parseFloat($(el).attr('width') || '0');
     const h = parseFloat($(el).attr('height') || '0');
-    const [, , vbW, vbH] = vb.split(/[\s,]+/).map(parseFloat);
+    const parts = vb.split(/[\s,]+/).map(parseFloat);
+    const vbW = parts[2] || 0;
+    const vbH = parts[3] || 0;
     const effectiveW = w || vbW || 0;
     const effectiveH = h || vbH || 0;
-    // Skip tiny icons: must be landscape OR have no explicit dimensions (assume wordmark)
-    if (effectiveW > 0 && effectiveH > 0 && effectiveH > effectiveW * 0.8) return;
+    if (effectiveW > 0 && effectiveH > 0 && effectiveH > effectiveW * 2) return;
     logosSet.add(`data:image/svg+xml;base64,${Buffer.from(svgHtml).toString('base64')}`);
   }
 
-  // Tier 1: imgs/svgs inside header/nav — collect ALL svgs and pick best
-  const navCtx = $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]');
-  navCtx.find('img').each((_: number, el: any) => addSrc($(el).attr('src') || $(el).attr('data-src') || ''));
-  navCtx.find('svg').each((_: number, el: any) => addInlineSvg(el));
-
-  // Tier 2: <a href="/"> wrapping img/svg
-  $('a').each((_: number, el: any) => {
-    const href = $(el).attr('href') || '';
-    if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
-      $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
-      $(el).find('svg').first().each((_2: number, svg: any) => addInlineSvg(svg));
-    }
+  // Tier 1: any element with logo-related class/id containing img or svg
+  $('[class*="logo"],[id*="logo"],[class*="brand"],[id*="brand"]').each((_: number, el: any) => {
+    $(el).find('img').addBack('img').each((_2: number, img: any) => addSrc($(img).attr('src') || $(img).attr('data-src') || ''));
+    $(el).find('svg').addBack('svg').each((_2: number, svg: any) => addInlineSvg(svg));
   });
 
-  // Tier 3: any img with logo-related keywords
+  // Tier 2: imgs/svgs inside header/nav
+  if (logosSet.size === 0) {
+    const navCtx = $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]');
+    navCtx.find('img').each((_: number, el: any) => addSrc($(el).attr('src') || $(el).attr('data-src') || ''));
+    navCtx.find('svg').each((_: number, el: any) => addInlineSvg(el));
+  }
+
+  // Tier 3: <a href="/"> wrapping img/svg
+  if (logosSet.size === 0) {
+    $('a').each((_: number, el: any) => {
+      const href = $(el).attr('href') || '';
+      if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
+        $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
+        $(el).find('svg').first().each((_2: number, svg: any) => addInlineSvg(svg));
+      }
+    });
+  }
+
+  // Tier 4: any img with logo-related keywords
   if (logosSet.size === 0) {
     $('img').each((_: number, el: any) => {
       const src = $(el).attr('src') || '';
@@ -233,13 +244,13 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
     });
   }
 
-  // Tier 4: og:image
+  // Tier 5: og:image
   if (logosSet.size === 0) {
     const ogImage = $('meta[property="og:image"]').attr('content') || '';
     if (ogImage) { const abs = resolveUrl(ogImage, targetUrl); if (abs) logosSet.add(abs); }
   }
 
-  // Tier 5: favicon
+  // Tier 6: favicon
   if (logosSet.size === 0) {
     $('link[rel*="icon"]').each((_: number, el: any) => {
       const href = $(el).attr('href') || '';
