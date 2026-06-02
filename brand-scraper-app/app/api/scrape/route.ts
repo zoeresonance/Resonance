@@ -204,12 +204,22 @@ function extractFontFamilies(css: string): string[] {
 
 function extractGoogleFonts(html: string): string[] {
   const fonts: string[] = [];
-  const re = /fonts\.googleapis\.com\/css[^"']*[?&]family=([^"'&]+)/gi;
+  // Match both old-style (family=Foo|Bar) and new-style (family=Foo:wght@400) Google Fonts URLs
+  const re = /fonts\.googleapis\.com\/css[^"'\s]*/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
-    for (const fam of m[1].split('|')) {
-      const name = decodeURIComponent(fam.split(':')[0]).replace(/\+/g, ' ').trim();
-      if (name && !fonts.includes(name)) fonts.push(name);
+    const url = m[0];
+    // Extract each `family=` param value
+    const famRe = /[?&]family=([^&"'\s]+)/gi;
+    let fm: RegExpExecArray | null;
+    while ((fm = famRe.exec(url)) !== null) {
+      // Each value may contain multiple fonts separated by `|` or repeated `family=`
+      for (const chunk of fm[1].split('|')) {
+        // Strip weight/style suffixes: "Inter:ital,wght@0,700" → "Inter"
+        const name = decodeURIComponent(chunk.split(':')[0].split('@')[0])
+          .replace(/\+/g, ' ').trim();
+        if (name && !fonts.includes(name)) fonts.push(name);
+      }
     }
   }
   return fonts;
@@ -371,7 +381,7 @@ Return a JSON object with EXACTLY these five keys:
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
 3. "primary_colors": Array of 1-3 hex values FROM THE CANDIDATE LIST. Include the dominant background color AND the most distinctive brand color (e.g. a specific blue, green, or accent used in buttons or key UI elements). Do not list more than one near-black or more than one near-white — if both are present, find a third distinctive color instead.
-4. "accent_colors": Array of 4-8 hex values FROM THE CANDIDATE LIST. Include warm and cool tones visible in graphics, illustrations, and CTAs. EXCLUDE values where all RGB channels are below 50 or above 210.
+4. "accent_colors": Array of 4-8 hex values FROM THE CANDIDATE LIST. Include: recurring text/link/heading colors, button colors, graphic and illustration colors, gradient colors. If a color is used consistently for text or links throughout the site, it belongs here. EXCLUDE values where all RGB channels are below 50 or above 210.
 5. "fonts": Array of 1-3 font names as REAL published names. Convert: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". One entry per typeface family. Return [] if none found.
 
 Website: ${targetUrl}
