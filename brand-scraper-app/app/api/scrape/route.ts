@@ -534,11 +534,13 @@ export async function POST(req: NextRequest) {
   const pageText = $('body').text().replace(/\s+/g, ' ').trim();
 
   // ── 8. Gemini analysis (with screenshot if available) ──────────────────
-  let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', primary_colors: [], accent_colors: [], fonts: [] };
+  let analysis: GeminiAnalysis;
   try {
     analysis = await analyzeWithGemini(pageText, allHexColors, cssFonts, googleFonts, siteName, targetUrl, ogDescription, screenshot ?? undefined);
   } catch (err) {
-    console.error('Gemini error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Gemini error:', msg);
+    return NextResponse.json({ error: `Gemini analysis failed: ${msg}` }, { status: 502 });
   }
 
   // ── 9. Merge fonts ──────────────────────────────────────────────────────
