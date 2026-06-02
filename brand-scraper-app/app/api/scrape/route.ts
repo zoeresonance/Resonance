@@ -458,11 +458,15 @@ export async function POST(req: NextRequest) {
 
   // ── 6. Logo (DOM) ───────────────────────────────────────────────────────
   const logos = extractLogos($, targetUrl, parsedUrl);
-  console.log('[logos]', logos.map(l => l.startsWith('data:') ? l.slice(0, 80) : l));
-  // Log all img tags to find the actual logo
+  // Debug: log wix-image and img elements
+  const wixImages: string[] = [];
+  $('wix-image, [data-testid*="image"], [data-testid*="logo"], [class*="logo"]').each((_: number, el: any) => {
+    wixImages.push(`tag=${el.name} class=${$(el).attr('class')||''} testid=${$(el).attr('data-testid')||''} html=${$.html(el).slice(0,200)}`);
+  });
+  console.log('[wix-images]', JSON.stringify(wixImages.slice(0, 10)));
   const allImgs: string[] = [];
   $('img').each((_: number, el: any) => {
-    allImgs.push(`src=${$(el).attr('src')||''} alt=${$(el).attr('alt')||''} class=${$(el).attr('class')||''}`);
+    allImgs.push(`src=${$(el).attr('src')||''} alt=${$(el).attr('alt')||''}`);
   });
   console.log('[all-imgs]', JSON.stringify(allImgs.slice(0, 20)));
 
