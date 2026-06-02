@@ -383,7 +383,7 @@ Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "primary_colors": Array of 1-3 hex values FROM THE CANDIDATE LIST. Include the dominant background color AND the most distinctive brand color (e.g. a specific blue, green, or accent used in buttons or key UI elements). Do not list more than one near-black or more than one near-white — if both are present, find a third distinctive color instead.
+3. "primary_colors": Array of 2-4 hex values FROM THE CANDIDATE LIST. Pick the colors that appear most frequently — the ones that define the overall look of the page (backgrounds, dominant text color, primary brand color). Favor colors near the TOP of the candidate list since they are the most frequently used.
 4. "accent_colors": Array of 4-8 hex values FROM THE CANDIDATE LIST. Include: recurring text/link/heading colors, button colors, graphic and illustration colors, gradient colors. If a color is used consistently for text or links throughout the site, it belongs here. EXCLUDE values where all RGB channels are below 50 or above 210.
 5. "fonts": Array of 1-3 font names as REAL published names. Convert: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim". One entry per typeface family. Return [] if none found.
 
