@@ -27,19 +27,26 @@ interface GeminiAnalysis {
 
 // ── Browserless fetch helpers ─────────────────────────────────────────────
 
+/** Browserless base URL — v2 uses a regional endpoint; v1 used chrome.browserless.io */
+const BROWSERLESS_BASE = process.env.BROWSERLESS_BASE_URL || 'https://production-sfo.browserless.io';
+
+function browserlessHeaders(token: string) {
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+}
+
 /** Fetch fully-rendered HTML via Browserless (runs JS). Falls back to plain fetch. */
 async function fetchRenderedHtml(url: string): Promise<string | null> {
   const token = process.env.BROWSERLESS_API_KEY;
   if (token) {
     try {
-      const res = await fetch(`https://chrome.browserless.io/content?token=${token}`, {
+      const res = await fetch(`${BROWSERLESS_BASE}/content`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, waitFor: 2000 }),
+        headers: browserlessHeaders(token),
+        body: JSON.stringify({ url, waitForTimeout: 2000 }),
         signal: AbortSignal.timeout(30000),
       });
       if (res.ok) return await res.text();
-      console.error('Browserless content failed:', res.status, await res.text().then(t => t.slice(0, 200)));
+      console.error('Browserless content failed:', res.status, await res.text().then(t => t.slice(0, 300)));
     } catch (err) {
       console.error('Browserless content error:', err);
     }
@@ -53,19 +60,19 @@ async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: s
   const token = process.env.BROWSERLESS_API_KEY;
   if (!token) return null;
   try {
-    const res = await fetch(`https://chrome.browserless.io/screenshot?token=${token}`, {
+    const res = await fetch(`${BROWSERLESS_BASE}/screenshot`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: browserlessHeaders(token),
       body: JSON.stringify({
         url,
-        waitFor: 2000,
+        waitForTimeout: 2000,
         options: { type: 'jpeg', quality: 80 },
         viewport: { width: 1280, height: 900 },
       }),
       signal: AbortSignal.timeout(35000),
     });
     if (!res.ok) {
-      console.error('Browserless screenshot failed:', res.status);
+      console.error('Browserless screenshot failed:', res.status, await res.text().then(t => t.slice(0, 300)));
       return null;
     }
     const buffer = await res.arrayBuffer();
