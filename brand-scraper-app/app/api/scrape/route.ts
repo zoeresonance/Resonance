@@ -58,27 +58,39 @@ function resolveUrl(href: string, base: string): string | null {
   try { return new URL(href, base).href; } catch { return null; }
 }
 
-// ── CSS summariser ─────────────────────────────────────────────────────────
-// Extracts the color/font-relevant parts of CSS to send to Gemini as text
+// ── Color / font extraction from raw HTML+CSS ─────────────────────────────
 
-function summariseCss(css: string): string {
-  const lines: string[] = [];
-
-  // :root custom properties
-  const rootMatch = css.match(/:root\s*\{([\s\S]*?)\}/);
-  if (rootMatch) lines.push(`:root {\n${rootMatch[1]}\n}`);
-
-  // font-family declarations
-  const fontRe = /font-family\s*:[^;}{]+;/gi;
+function extractAllHexColors(text: string): string[] {
+  const seen = new Set<string>();
+  const results: string[] = [];
+  const re = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
   let m: RegExpExecArray | null;
-  while ((m = fontRe.exec(css)) !== null) lines.push(m[0].trim());
+  while ((m = re.exec(text)) !== null) {
+    let h = m[1];
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    const hex = '#' + h.toUpperCase();
+    if (!seen.has(hex)) { seen.add(hex); results.push(hex); }
+  }
+  return results;
+}
 
-  // color/background/fill/stroke declarations with hex, rgb, or hsl values
-  const colorRe = /(?:color|background(?:-color)?|fill|stroke|border(?:-color)?)\s*:\s*(?:#[0-9a-fA-F]{3,6}|rgba?\([^)]+\)|hsla?\([^)]+\))[^;]*;/gi;
-  while ((m = colorRe.exec(css)) !== null) lines.push(m[0].trim());
-
-  // Deduplicate and cap
-  return [...new Set(lines)].slice(0, 200).join('\n');
+function extractFontFamilies(css: string): string[] {
+  const SKIP = new Set(['serif','sans-serif','monospace','cursive','fantasy','system-ui',
+    'inherit','initial','unset','-apple-system','blinkmacsystemfont','segoe ui',
+    'helvetica neue','helvetica','arial','georgia','verdana','tahoma','courier new']);
+  const seen = new Set<string>();
+  const results: string[] = [];
+  const re = /font-family\s*:\s*([^;}{]+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(css)) !== null) {
+    for (const part of m[1].split(',')) {
+      const name = part.trim().replace(/['"]/g, '').trim();
+      if (name && name.length < 60 && !SKIP.has(name.toLowerCase()) && !seen.has(name)) {
+        seen.add(name); results.push(name);
+      }
+    }
+  }
+  return results;
 }
 
 // ── Google Fonts extraction ────────────────────────────────────────────────
@@ -160,7 +172,9 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
 
 async function analyzeWithGemini(
   pageText: string,
-  cssText: string,
+  allHexColors: string[],
+  cssFonts: string[],
+  googleFonts: string[],
   siteName: string,
   targetUrl: string,
   ogDescription: string,
@@ -170,24 +184,29 @@ async function analyzeWithGemini(
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-  const prompt = `You are a brand analyst. Analyze the website CSS and page text below to extract brand identity information.
+  const allFonts = [...new Set([...cssFonts, ...googleFonts])];
+
+  const prompt = `You are a brand analyst. Analyze the website data below to extract brand identity.
 
 Return a JSON object with EXACTLY these four keys:
 
-1. "brand_voice": 2-4 sentences describing the brand's tone, personality, and communication style.
-2. "brand_story": 3-5 sentences describing what this company does, its mission, and who it serves.
-3. "colors": Array of 3-8 hex color strings of the brand's PRIMARY visual colors. Read the CSS carefully — look for colors used on buttons, headings, links, hero backgrounds, accent elements, and CSS custom properties. Exclude generic near-white backgrounds (#f0f0f0 and lighter) and near-black text (#222 and darker) UNLESS they are clearly an intentional brand color (e.g. a jet-black logo). Return hex in #RRGGBB format.
-4. "fonts": Array of 1-3 font name strings for the most prominent typefaces (headings and body). Pull from font-family declarations and Google Fonts links.
+1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
+2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
+3. "colors": Pick 3-8 hex codes from the CANDIDATE COLORS list that represent the brand's intentional palette — accent colors, button colors, link colors, hero/section backgrounds, logo colors. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) and pure grays (r≈g≈b) unless clearly a brand choice. Return as "#RRGGBB" strings.
+4. "fonts": Pick 1-3 font names from the CANDIDATE FONTS list that are the primary typefaces. If the list is empty return an empty array.
 
 Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-PAGE CSS (color & font declarations):
-${cssText}
+CANDIDATE COLORS (all hex values found on the page):
+${allHexColors.slice(0, 300).join(', ')}
+
+CANDIDATE FONTS:
+${allFonts.join(', ') || '(none detected)'}
 
 PAGE TEXT (truncated):
-${pageText.slice(0, 3000)}
+${pageText.slice(0, 2000)}
 
 Return ONLY valid JSON, no markdown:
 {"brand_voice":"...","brand_story":"...","colors":["#RRGGBB",...],"fonts":["..."]}`;
@@ -305,30 +324,33 @@ export async function POST(req: NextRequest) {
   const externalCssParts = await Promise.all(cssLinks.map(fetchCss));
   rawCss += externalCssParts.join('\n');
 
-  const cssText = summariseCss(rawCss);
+  // ── 4. Extract all hex colors from HTML + CSS ───────────────────────────
+  // Include inline style attributes, CSS files, and even Tailwind arbitrary values
+  const allHexColors = extractAllHexColors(html + '\n' + rawCss);
+  const cssFonts = extractFontFamilies(rawCss);
 
-  // ── 4. Google Fonts ─────────────────────────────────────────────────────
+  // ── 5. Google Fonts ─────────────────────────────────────────────────────
   const googleFonts = extractGoogleFonts(html);
 
-  // ── 5. Logo (DOM) ───────────────────────────────────────────────────────
+  // ── 6. Logo (DOM) ───────────────────────────────────────────────────────
   const logos = extractLogos($, targetUrl, parsedUrl);
 
-  // ── 6. Page text ────────────────────────────────────────────────────────
+  // ── 7. Page text ────────────────────────────────────────────────────────
   $('script, style, noscript, iframe').remove();
   const pageText = $('body').text().replace(/\s+/g, ' ').trim();
 
-  // ── 7. Gemini analysis (CSS + text) ─────────────────────────────────────
+  // ── 8. Gemini analysis ──────────────────────────────────────────────────
   let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', colors: [], fonts: [] };
   try {
-    analysis = await analyzeWithGemini(pageText, cssText, siteName, targetUrl, ogDescription);
+    analysis = await analyzeWithGemini(pageText, allHexColors, cssFonts, googleFonts, siteName, targetUrl, ogDescription);
   } catch (err) {
     console.error('Gemini error:', err);
   }
 
-  // ── 8. Merge fonts ──────────────────────────────────────────────────────
+  // ── 9. Merge fonts ──────────────────────────────────────────────────────
   const fonts = [...new Set([...analysis.fonts, ...googleFonts])].slice(0, 4);
 
-  // ── 9. Build result ─────────────────────────────────────────────────────
+  // ── 10. Build result ────────────────────────────────────────────────────
   const partial: Omit<ScrapeResult, 'markdown'> = {
     siteName,
     url: targetUrl,
