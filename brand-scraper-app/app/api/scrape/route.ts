@@ -58,36 +58,55 @@ function resolveUrl(href: string, base: string): string | null {
   try { return new URL(href, base).href; } catch { return null; }
 }
 
-// ── Color / font extraction from raw HTML+CSS ─────────────────────────────
+// ── Color / font extraction ────────────────────────────────────────────────
 
-function extractAllHexColors(text: string): string[] {
+function hexFromText(text: string): string[] {
   const seen = new Set<string>();
-  const results: string[] = [];
+  const out: string[] = [];
   const re = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     let h = m[1];
     if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     const hex = '#' + h.toUpperCase();
-    if (!seen.has(hex)) { seen.add(hex); results.push(hex); }
+    if (!seen.has(hex)) { seen.add(hex); out.push(hex); }
   }
-  return results;
+  return out;
+}
+
+/** Extract hex colors ONLY from CSS and inline style attributes — never from script content. */
+function extractColorsFromPage($: ReturnType<typeof cheerio.load>, externalCss: string): string[] {
+  const sources: string[] = [];
+
+  // 1. <style> block content
+  $('style').each((_: number, el: any) => { sources.push($(el).text()); });
+
+  // 2. Inline style attributes on visible elements (not script/style tags)
+  $('[style]').each((_: number, el: any) => {
+    const tag = (el as any).name?.toLowerCase() || '';
+    if (tag !== 'script' && tag !== 'style') sources.push($(el).attr('style') || '');
+  });
+
+  // 3. External CSS
+  sources.push(externalCss);
+
+  return hexFromText(sources.join('\n'));
 }
 
 function extractFontFamilies(css: string): string[] {
   const SKIP = new Set(['serif','sans-serif','monospace','cursive','fantasy','system-ui',
     'inherit','initial','unset','-apple-system','blinkmacsystemfont','segoe ui',
-    'helvetica neue','helvetica','arial','georgia','verdana','tahoma','courier new']);
+    'helvetica neue','helvetica','arial','georgia','verdana','tahoma','courier new',
+    'helvetica neue']);
   const seen = new Set<string>();
   const results: string[] = [];
+  // Only match font-family inside @font-face or CSS rules, not arbitrary text
   const re = /font-family\s*:\s*([^;}{]+)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css)) !== null) {
-    for (const part of m[1].split(',')) {
-      const name = part.trim().replace(/['"]/g, '').trim();
-      if (name && name.length < 60 && !SKIP.has(name.toLowerCase()) && !seen.has(name)) {
-        seen.add(name); results.push(name);
-      }
+    const first = m[1].split(',')[0].trim().replace(/['"]/g, '').trim();
+    if (first && first.length < 60 && !SKIP.has(first.toLowerCase()) && !seen.has(first)) {
+      seen.add(first); results.push(first);
     }
   }
   return results;
@@ -309,9 +328,9 @@ export async function POST(req: NextRequest) {
     $('meta[property="og:description"]').attr('content') ||
     $('meta[name="description"]').attr('content') || '';
 
-  // ── 3. Collect CSS (inline + up to 3 external sheets) ───────────────────
-  let rawCss = '';
-  $('style').each((_: number, el: any) => { rawCss += $(el).text() + '\n'; });
+  // ── 3. Collect CSS (inline <style> blocks + up to 3 external sheets) ─────
+  let inlineCss = '';
+  $('style').each((_: number, el: any) => { inlineCss += $(el).text() + '\n'; });
 
   const cssLinks: string[] = [];
   $('link[rel="stylesheet"]').each((_: number, el: any) => {
@@ -322,12 +341,12 @@ export async function POST(req: NextRequest) {
     }
   });
   const externalCssParts = await Promise.all(cssLinks.map(fetchCss));
-  rawCss += externalCssParts.join('\n');
+  const rawCss = inlineCss + externalCssParts.join('\n');
 
-  // ── 4. Extract all hex colors from HTML + CSS ───────────────────────────
-  // Include inline style attributes, CSS files, and even Tailwind arbitrary values
-  const allHexColors = extractAllHexColors(html + '\n' + rawCss);
-  const cssFonts = extractFontFamilies(rawCss);
+  // ── 4. Extract hex colors from CSS + inline styles only (not scripts) ────
+  const externalCss = externalCssParts.join('\n');
+  const allHexColors = extractColorsFromPage($, externalCss);
+  const cssFonts = extractFontFamilies(rawCss + '\n' + externalCss);
 
   // ── 5. Google Fonts ─────────────────────────────────────────────────────
   const googleFonts = extractGoogleFonts(html);
