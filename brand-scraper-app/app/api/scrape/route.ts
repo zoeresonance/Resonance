@@ -282,8 +282,8 @@ Return a JSON object with EXACTLY these five keys:
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
 3. "primary_colors": Array of 1-3 hex strings for the brand's MAIN colors — dominant backgrounds and the single most prominent brand color. Derive from ${colorSource}.
-4. "accent_colors": Array of 2-5 hex strings for secondary colors — CTAs, highlights, decorative elements. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional. Derive from ${colorSource}.
-5. "fonts": Array of 1-3 font names. If a name looks like a CSS identifier (e.g. "madefor-display-bold"), convert it to a readable name (e.g. "Made For Display Bold"). If none detected return [].
+4. "accent_colors": Array of 3-8 hex strings for secondary colors — CTAs, highlights, gradients, decorative elements, hover states. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional. Cast a wide net — include teal, mint, sage, warm grays, and any other colors that appear consistently. Derive from ${colorSource}.
+5. "fonts": Array of 1-4 font names as their REAL published names (not CSS identifiers). Examples of conversions: "madefor-display" → "Wix Madefor Display", "madefor-text" → "Wix Madefor Text", "gt-walsheim" → "GT Walsheim", "neue-haas-grotesk" → "Neue Haas Grotesk", "editorial-new" → "PP Editorial New", "pp-neue-montreal" → "PP Neue Montreal". If you don't recognise the CSS name, clean it up by removing hyphens, capitalising words, and removing weight suffixes like -bold/-regular/-medium. If none detected return [].
 
 Website: ${targetUrl}
 Site name: ${siteName}
@@ -334,7 +334,7 @@ Return ONLY valid JSON, no markdown:
       brand_voice: parsed.brand_voice ?? '',
       brand_story: parsed.brand_story ?? '',
       primary_colors: validHex(parsed.primary_colors).slice(0, 3),
-      accent_colors: validHex(parsed.accent_colors).slice(0, 6),
+      accent_colors: validHex(parsed.accent_colors).slice(0, 8),
       fonts: Array.isArray(parsed.fonts) ? parsed.fonts.slice(0, 3) : [],
     };
   } catch {
