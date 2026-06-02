@@ -27,21 +27,17 @@ interface GeminiAnalysis {
 
 // ── Browserless fetch helpers ─────────────────────────────────────────────
 
-/** Browserless base URL — v2 uses a regional endpoint; v1 used chrome.browserless.io */
+/** Browserless base URL */
 const BROWSERLESS_BASE = process.env.BROWSERLESS_BASE_URL || 'https://production-sfo.browserless.io';
-
-function browserlessHeaders(token: string) {
-  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-}
 
 /** Fetch fully-rendered HTML via Browserless (runs JS). Falls back to plain fetch. */
 async function fetchRenderedHtml(url: string): Promise<string | null> {
   const token = process.env.BROWSERLESS_API_KEY;
   if (token) {
     try {
-      const res = await fetch(`${BROWSERLESS_BASE}/content`, {
+      const res = await fetch(`${BROWSERLESS_BASE}/chromium/content?token=${token}`, {
         method: 'POST',
-        headers: browserlessHeaders(token),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, waitForTimeout: 2000 }),
         signal: AbortSignal.timeout(30000),
       });
@@ -51,7 +47,6 @@ async function fetchRenderedHtml(url: string): Promise<string | null> {
       console.error('Browserless content error:', err);
     }
   }
-  // Fallback: plain HTTP fetch (works for server-rendered sites)
   return fetchStaticHtml(url);
 }
 
@@ -60,9 +55,9 @@ async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: s
   const token = process.env.BROWSERLESS_API_KEY;
   if (!token) return null;
   try {
-    const res = await fetch(`${BROWSERLESS_BASE}/screenshot`, {
+    const res = await fetch(`${BROWSERLESS_BASE}/chromium/screenshot?token=${token}`, {
       method: 'POST',
-      headers: browserlessHeaders(token),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url,
         waitForTimeout: 2000,
