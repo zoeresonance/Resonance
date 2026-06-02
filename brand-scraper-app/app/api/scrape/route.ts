@@ -192,6 +192,33 @@ function extractGoogleFonts(html: string): string[] {
 
 // ── Logo detection ─────────────────────────────────────────────────────────
 
+/**
+ * For Wix CDN URLs, parse the original crop dimensions to get the true aspect ratio,
+ * and reconstruct a clean high-res URL by stripping blur/tiny resize transforms.
+ */
+function wixLogoUrl(src: string): { url: string; aspectRatio: number } | null {
+  try {
+    // Match: https://static.wixstatic.com/media/{hash}/v1/.../w_NNN,h_NNN,.../{filename}
+    const m = src.match(/static\.wixstatic\.com\/media\/([^/]+)/);
+    if (!m) return null;
+    const hash = m[1];
+    // Try to extract original dimensions from crop or fill params
+    const cropM = src.match(/\/crop\/[^/]*[,/]w_(\d+)[,/][^/]*h_(\d+)/);
+    const fillM = src.match(/\/fill\/[^/]*[,/]w_(\d+)[,/][^/]*h_(\d+)/);
+    const dims = cropM || fillM;
+    if (!dims) return null;
+    const origW = parseInt(dims[1]);
+    const origH = parseInt(dims[2]);
+    if (!origW || !origH) return null;
+    const aspectRatio = origW / origH;
+    // Reconstruct a clean, reasonably sized URL
+    const ext = hash.split('~mv2.')[1] || hash.split('.').pop() || 'png';
+    const filename = src.split('/').pop() || `logo.${ext}`;
+    const cleanUrl = `https://static.wixstatic.com/media/${hash}/v1/fill/w_400,al_c,q_90,enc_avif/${filename}`;
+    return { url: cleanUrl, aspectRatio };
+  } catch { return null; }
+}
+
 function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, parsedUrl: URL): string[] {
   const logosSet = new Set<string>();
   const logoPattern = /logo|brand|mark|emblem/i;
@@ -252,13 +279,29 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
     });
   }
 
-  // Tier 5: og:image
+  // Tier 5: wide-aspect-ratio images (wordmarks) — catches Wix and similar CDN-hosted logos
+  if (logosSet.size === 0) {
+    let bestAR = 0;
+    let bestUrl = '';
+    $('img').each((_: number, el: any) => {
+      const src = $(el).attr('src') || $(el).attr('data-src') || '';
+      if (!src) return;
+      const parsed = wixLogoUrl(src);
+      if (parsed && parsed.aspectRatio > 2.5 && parsed.aspectRatio > bestAR) {
+        bestAR = parsed.aspectRatio;
+        bestUrl = parsed.url;
+      }
+    });
+    if (bestUrl) logosSet.add(bestUrl);
+  }
+
+  // Tier 7: og:image
   if (logosSet.size === 0) {
     const ogImage = $('meta[property="og:image"]').attr('content') || '';
     if (ogImage) { const abs = resolveUrl(ogImage, targetUrl); if (abs) logosSet.add(abs); }
   }
 
-  // Tier 6: favicon
+  // Tier 8: favicon
   if (logosSet.size === 0) {
     $('link[rel*="icon"]').each((_: number, el: any) => {
       const href = $(el).attr('href') || '';
@@ -458,17 +501,6 @@ export async function POST(req: NextRequest) {
 
   // ── 6. Logo (DOM) ───────────────────────────────────────────────────────
   const logos = extractLogos($, targetUrl, parsedUrl);
-  // Debug: log wix-image and img elements
-  const wixImages: string[] = [];
-  $('wix-image, [data-testid*="image"], [data-testid*="logo"], [class*="logo"]').each((_: number, el: any) => {
-    wixImages.push(`tag=${el.name} class=${$(el).attr('class')||''} testid=${$(el).attr('data-testid')||''} html=${$.html(el).slice(0,200)}`);
-  });
-  console.log('[wix-images]', JSON.stringify(wixImages.slice(0, 10)));
-  const allImgs: string[] = [];
-  $('img').each((_: number, el: any) => {
-    allImgs.push(`src=${$(el).attr('src')||''} alt=${$(el).attr('alt')||''}`);
-  });
-  console.log('[all-imgs]', JSON.stringify(allImgs.slice(0, 20)));
 
   // ── 7. Page text ────────────────────────────────────────────────────────
   $('script, style, noscript, iframe').remove();
