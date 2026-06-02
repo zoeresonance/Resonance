@@ -11,7 +11,6 @@ interface ScrapeResult {
   logos: string[];
   brandVoice: string;
   brandStory: string;
-  screenshotUrl: string;
   markdown: string;
 }
 
@@ -45,7 +44,7 @@ async function fetchHtml(url: string): Promise<string | null> {
 
 async function fetchScreenshotAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
   // thum.io: free, no auth, returns a JPEG screenshot
-  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/png/${encodeURIComponent(url)}`;
+  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/${encodeURIComponent(url)}`;
   try {
     const res = await fetch(screenshotUrl, { signal: AbortSignal.timeout(25000) });
     if (!res.ok) return null;
@@ -95,20 +94,27 @@ function extractLogos($: ReturnType<typeof cheerio.load>, targetUrl: string, par
     }
   }
 
-  // Tier 1: imgs inside header/nav
-  $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]').find('img').each((_: number, el: any) => {
+  function addInlineSvg(el: any) {
+    const svgHtml = $.html(el) as string;
+    if (svgHtml && svgHtml.length < 50000) {
+      const dataUri = `data:image/svg+xml;base64,${Buffer.from(svgHtml).toString('base64')}`;
+      logosSet.add(dataUri);
+    }
+  }
+
+  // Tier 1: imgs/svgs inside header/nav
+  const navContext = $('header, nav, [class*="header"], [class*="navbar"], [class*="nav-bar"], [role="banner"]');
+  navContext.find('img').each((_: number, el: any) => {
     addSrc($(el).attr('src') || $(el).attr('data-src') || '');
   });
-  if ($('header, nav, [class*="header"], [class*="navbar"], [role="banner"]').find('svg').length > 0) {
-    logosSet.add('[inline SVG logo in header/nav]');
-  }
+  navContext.find('svg').first().each((_: number, el: any) => addInlineSvg(el));
 
   // Tier 2: <a href="/"> wrapping img/svg
   $('a').each((_: number, el: any) => {
     const href = $(el).attr('href') || '';
     if (href === '/' || href === targetUrl || href === parsedUrl.origin + '/') {
       $(el).find('img').each((_2: number, img: any) => addSrc($(img).attr('src') || ''));
-      if ($(el).find('svg').length > 0) logosSet.add('[inline SVG logo in home-link]');
+      $(el).find('svg').first().each((_2: number, svg: any) => addInlineSvg(svg));
     }
   });
 
@@ -379,8 +385,6 @@ Return ONLY JSON: {"brand_voice":"...","brand_story":"...","colors":[],"fonts":[
   const fonts = [...new Set([...analysis.fonts, ...googleFonts])].slice(0, 4);
 
   // ── 8. Build result ─────────────────────────────────────────────────────
-  const screenshotUrl = `https://image.thum.io/get/width/1280/crop/900/png/${encodeURIComponent(targetUrl)}`;
-
   const partial: Omit<ScrapeResult, 'markdown'> = {
     siteName,
     url: targetUrl,
@@ -389,7 +393,6 @@ Return ONLY JSON: {"brand_voice":"...","brand_story":"...","colors":[],"fonts":[
     logos,
     brandVoice: analysis.brand_voice,
     brandStory: analysis.brand_story,
-    screenshotUrl,
   };
 
   const markdown = buildMarkdown(partial);

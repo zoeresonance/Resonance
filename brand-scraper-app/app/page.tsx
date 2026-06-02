@@ -11,7 +11,6 @@ interface BrandResult {
   logos: string[];
   brandVoice: string;
   brandStory: string;
-  screenshotUrl?: string;
   markdown: string;
 }
 

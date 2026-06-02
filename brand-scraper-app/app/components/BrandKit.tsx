@@ -8,7 +8,6 @@ interface BrandResult {
   logos: string[];
   brandVoice: string;
   brandStory: string;
-  screenshotUrl?: string;
   markdown: string;
 }
 
@@ -19,7 +18,12 @@ interface Props {
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|svg|webp|ico)(\?.*)?$/i;
 
 function isImageUrl(url: string): boolean {
-  return IMAGE_EXTENSIONS.test(url);
+  return IMAGE_EXTENSIONS.test(url) || url.startsWith('data:image/');
+}
+
+function logoLabel(url: string): string {
+  if (url.startsWith('data:image/svg')) return 'logo.svg';
+  return url.split('/').pop()?.split('?')[0] || 'logo';
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -32,22 +36,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function BrandKit({ result }: Props) {
-  const { colors, fonts, logos, brandVoice, brandStory, screenshotUrl } = result;
+  const { colors, fonts, logos, brandVoice, brandStory } = result;
 
   return (
     <div className="grid grid-cols-1 gap-0">
-      {/* Screenshot */}
-      {screenshotUrl && (
-        <Section title="Page Screenshot">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={screenshotUrl}
-            alt="Website screenshot"
-            className="w-full rounded-xl border border-gray-700 object-cover"
-          />
-        </Section>
-      )}
-
       {/* Brand Story */}
       {brandStory && (
         <Section title="Brand Story">
@@ -117,15 +109,20 @@ export default function BrandKit({ result }: Props) {
                       }}
                     />
                   </div>
-                  <a
-                    href={logoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-indigo-400 hover:text-indigo-300 max-w-[140px] truncate"
-                    title={logoUrl}
-                  >
-                    {logoUrl.split('/').pop() || 'logo'}
-                  </a>
+                  {!logoUrl.startsWith('data:') && (
+                    <a
+                      href={logoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-400 hover:text-indigo-300 max-w-[140px] truncate"
+                      title={logoUrl}
+                    >
+                      {logoLabel(logoUrl)}
+                    </a>
+                  )}
+                  {logoUrl.startsWith('data:') && (
+                    <span className="text-xs text-gray-500">{logoLabel(logoUrl)}</span>
+                  )}
                 </div>
               ) : (
                 <div key={logoUrl} className="flex flex-col items-center gap-2">
