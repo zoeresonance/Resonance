@@ -25,7 +25,58 @@ interface GeminiAnalysis {
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────
 
-async function fetchHtml(url: string): Promise<string | null> {
+// ── Browserless fetch helpers ─────────────────────────────────────────────
+
+/** Fetch fully-rendered HTML via Browserless (runs JS). Falls back to plain fetch. */
+async function fetchRenderedHtml(url: string): Promise<string | null> {
+  const token = process.env.BROWSERLESS_API_KEY;
+  if (token) {
+    try {
+      const res = await fetch(`https://chrome.browserless.io/content?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, waitFor: 2000 }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) return await res.text();
+      console.error('Browserless content failed:', res.status, await res.text().then(t => t.slice(0, 200)));
+    } catch (err) {
+      console.error('Browserless content error:', err);
+    }
+  }
+  // Fallback: plain HTTP fetch (works for server-rendered sites)
+  return fetchStaticHtml(url);
+}
+
+/** Get a screenshot as base64 via Browserless. Returns null on failure. */
+async function fetchScreenshot(url: string): Promise<{ data: string; mimeType: string } | null> {
+  const token = process.env.BROWSERLESS_API_KEY;
+  if (!token) return null;
+  try {
+    const res = await fetch(`https://chrome.browserless.io/screenshot?token=${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        waitFor: 2000,
+        options: { type: 'jpeg', quality: 80 },
+        viewport: { width: 1280, height: 900 },
+      }),
+      signal: AbortSignal.timeout(35000),
+    });
+    if (!res.ok) {
+      console.error('Browserless screenshot failed:', res.status);
+      return null;
+    }
+    const buffer = await res.arrayBuffer();
+    return { data: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' };
+  } catch (err) {
+    console.error('Browserless screenshot error:', err);
+    return null;
+  }
+}
+
+async function fetchStaticHtml(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
@@ -207,6 +258,7 @@ async function analyzeWithGemini(
   siteName: string,
   targetUrl: string,
   ogDescription: string,
+  screenshot?: { data: string; mimeType: string },
 ): Promise<GeminiAnalysis> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
@@ -215,21 +267,27 @@ async function analyzeWithGemini(
 
   const allFonts = [...new Set([...cssFonts, ...googleFonts])];
 
+  const hasScreenshot = !!screenshot;
+  const colorSource = hasScreenshot
+    ? 'the screenshot (most accurate) and the candidate list as a reference'
+    : 'the CANDIDATE COLORS list extracted from CSS and inline styles';
+
   const prompt = `You are a brand analyst. Analyze the website data below to extract brand identity.
+${hasScreenshot ? 'A rendered screenshot of the page is attached — use it as your primary source for colors and fonts.' : ''}
 
 Return a JSON object with EXACTLY these five keys:
 
 1. "brand_voice": 2-4 sentences on the brand's tone, personality, and communication style.
 2. "brand_story": 3-5 sentences on what this company does, its mission, and who it serves.
-3. "primary_colors": Array of 1-3 hex strings for the brand's MAIN colors — the dominant background, primary text color if it's a brand color, and the single most prominent brand color.
-4. "accent_colors": Array of 2-5 hex strings for secondary/supporting colors — CTAs, highlights, decorative elements, hover states, secondary sections. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional brand choices.
-5. "fonts": Array of 1-3 font names from the CANDIDATE FONTS list. If a name looks like a CSS identifier (e.g. "madefor-display-bold"), convert it to a proper font name (e.g. "Made For Display Bold"). If the list is empty return [].
+3. "primary_colors": Array of 1-3 hex strings for the brand's MAIN colors — dominant backgrounds and the single most prominent brand color. Derive from ${colorSource}.
+4. "accent_colors": Array of 2-5 hex strings for secondary colors — CTAs, highlights, decorative elements. EXCLUDE near-whites (all channels > 210) and near-blacks (all channels < 50) unless clearly intentional. Derive from ${colorSource}.
+5. "fonts": Array of 1-3 font names. If a name looks like a CSS identifier (e.g. "madefor-display-bold"), convert it to a readable name (e.g. "Made For Display Bold"). If none detected return [].
 
 Website: ${targetUrl}
 Site name: ${siteName}
 Meta description: ${ogDescription}
 
-CANDIDATE COLORS (extracted from page CSS and inline styles — no script content):
+CANDIDATE COLORS (from CSS/inline styles):
 ${allHexColors.slice(0, 300).join(', ')}
 
 CANDIDATE FONTS:
@@ -241,14 +299,18 @@ ${pageText.slice(0, 2000)}
 Return ONLY valid JSON, no markdown:
 {"brand_voice":"...","brand_story":"...","primary_colors":["#RRGGBB",...],"accent_colors":["#RRGGBB",...],"fonts":["..."]}`;
 
+  const parts: object[] = screenshot
+    ? [{ inlineData: { mimeType: screenshot.mimeType, data: screenshot.data } }, { text: prompt }]
+    : [{ text: prompt }];
+
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: { temperature: 0.2 },
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(90000),
   });
 
   if (!res.ok) {
@@ -330,7 +392,11 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: `Invalid URL: "${rawUrl}"` }, { status: 400 }); }
 
   // ── 1. Fetch HTML ───────────────────────────────────────────────────────
-  const html = await fetchHtml(targetUrl);
+  // ── 1. Fetch rendered HTML + screenshot in parallel (Browserless) ─────────
+  const [html, screenshot] = await Promise.all([
+    fetchRenderedHtml(targetUrl),
+    fetchScreenshot(targetUrl),
+  ]);
   if (!html) return NextResponse.json({ error: `Could not fetch ${targetUrl}.` }, { status: 422 });
 
   const $ = cheerio.load(html);
@@ -376,10 +442,10 @@ export async function POST(req: NextRequest) {
   $('script, style, noscript, iframe').remove();
   const pageText = $('body').text().replace(/\s+/g, ' ').trim();
 
-  // ── 8. Gemini analysis ──────────────────────────────────────────────────
+  // ── 8. Gemini analysis (with screenshot if available) ──────────────────
   let analysis: GeminiAnalysis = { brand_voice: '', brand_story: '', primary_colors: [], accent_colors: [], fonts: [] };
   try {
-    analysis = await analyzeWithGemini(pageText, allHexColors, cssFonts, googleFonts, siteName, targetUrl, ogDescription);
+    analysis = await analyzeWithGemini(pageText, allHexColors, cssFonts, googleFonts, siteName, targetUrl, ogDescription, screenshot ?? undefined);
   } catch (err) {
     console.error('Gemini error:', err);
   }
