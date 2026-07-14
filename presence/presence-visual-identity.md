@@ -1,53 +1,37 @@
 ## Logo
 
-The icon is an abstract S-curve built from three parallel flowing lines — simultaneously evoking the letter S, movement, and water/flow. The wordmark is always lowercase, always one word: **stonecreek**.
+The **presence** wordmark is a single lowercase word, set in an elegant, high-contrast display serif with a long, gently curling descender on the "p." There is no separate icon mark — the wordmark *is* the logo. The typeface's soft curves and generous negative space echo the book's core idea: presence as something unhurried, human, and whole.
 
-### SVG — Icon Only
+**Always lowercase. Always one word.** Never set in all caps, never abbreviated.
 
-```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
-  <!-- Three parallel S-curve strokes forming the icon -->
-  <path d="M 20 30 Q 20 15 40 15 L 155 15" stroke="#6C7E7C" stroke-width="9" stroke-linecap="round" fill="none"/>
-  <path d="M 155 15 Q 175 15 175 30 L 175 50 Q 175 65 155 65 L 45 65 Q 25 65 25 80 L 25 90 Q 25 105 45 105 L 160 105" stroke="#6C7E7C" stroke-width="9" stroke-linecap="round" fill="none"/>
-  <path d="M 20 55 Q 20 40 40 40 L 130 40" stroke="#6C7E7C" stroke-width="9" stroke-linecap="round" fill="none"/>
-  <!-- Short dash tail (right side) -->
-  <line x1="178" y1="65" x2="198" y2="65" stroke="#6C7E7C" stroke-width="9" stroke-linecap="round"/>
-  <line x1="163" y1="105" x2="183" y2="105" stroke="#6C7E7C" stroke-width="9" stroke-linecap="round"/>
-</svg>
-```
-
-> **Note:** For production use, always pull official logo files from the asset library. The SVG above is a reference approximation for layout and color testing only.
-
-### Approved Logo Lockups
+### Approved Lockups
 
 | Lockup | When to Use |
 |---|---|
-| **Horizontal** — icon left, wordmark right | Default; most headers, banners, slides |
-| **Vertical** — icon above, wordmark below | Square formats, profile images, stacked layouts |
-| **Icon only** — S-curve mark alone | App icons, favicons, embroidery, small print |
-| **Tagline variation** — adds "Go Together" below wordmark | Campaign materials, closing frames, merch |
+| **Wordmark alone** — "presence" | Default; covers, headers, social profile marks, merch |
+| **Wordmark + subtitle** — "presence" with "MODERN BIRTH · PRIMAL WISDOM" beneath, in tracked-out small caps | Book covers, formal announcements, title slides |
+| **Wordmark + author line** — "presence" with "MARGARET MCKINNEY BUXTON DNP, CNM" in tracked-out small caps | Author-facing materials, press, event signage |
+| **Spine lockup** — subtitle stacked vertically, wordmark rotated 90°, author name stacked vertically | Spine treatments, narrow vertical formats only |
 
 ### Color Variants
 
 | Variant | Background | Logo Color | Use Case |
 |---|---|---|---|
-| Full color | White / Pebble White | Mossy Green `#6C7E7C` | Default digital & print |
-| Reversed white | Mossy Green / dark / photo | White `#FFFFFF` | Dark backgrounds, social posts |
-| Black | Light / neutral | Black `#000000` | Single-color print |
-| Punch-out | Rounded pill in brand color | White icon | Social media icon badges, stickers |
+| Deep Rose (primary) | Pebble Grey / Blush / cream gradients | Deep Rose Berry (dark tone of `#BF5468`) | Default — covers, print, light social backgrounds |
+| Rose Berry | White / Pebble White | `#BF5468` | Digital, social posts, secondary marks |
+| Reversed white | Deep Rose Berry / photo backgrounds | `#FFFFFF` | Dark or photographic backgrounds |
 
-**Punch-out pill colors approved:** Mossy Green `#515F5D`, Desert Sand `#B39986`, Charcoal, or photographic background.
+> Note: the front cover title uses a deepened, richer version of the palette's Rose Berry for maximum contrast against the floral gradient. When producing new assets, sample the exact value from source files rather than assuming it matches `#BF5468` at full opacity — treat it as "Rose Berry, darkened."
 
 ### Logo Don'ts
 
 | ❌ Don't | Why |
 |---|---|
-| Stroke/outline version | Undermines the clean, solid mark |
-| Rotate or tilt | Looks unstable and unprofessional |
-| Unauthorized colors | Breaks brand cohesion |
-| Drop shadows, gradients, effects | Cheapens the mark |
-| Stretch or squish | Always scale proportionally |
-| Add extra words next to the mark | Only approved tagline permitted |
+| Capitalize any letter | Breaks the calm, intimate tone of the mark |
+| Add an icon, symbol, or flourish beside the wordmark | The wordmark is the whole mark — no companion icon exists |
+| Bold, condense, or expand the type | Distorts the serif's proportions and softness |
+| Place on busy, high-contrast photography without a gradient/vignette | Wordmark needs a calm field to sit in |
+| Use a heavy sans-serif substitute | Undermines the editorial, literary feel |
 
 ---
 
@@ -55,49 +39,24 @@ The icon is an abstract S-curve built from three parallel flowing lines — simu
 
 ### Main Brand
 
-| Swatch | Name | Hex | Pantone | Primary Use |
-|---|---|---|---|---|
-| 🟢 | **Mossy Green Dark** | `#515F5D` | — | Background fills, dark surfaces |
-| 🟢 | **Mossy Green** | `#6C7E7C` | 5487 UP | Logo, primary accent |
-| 🟢 | Mossy Green Light | `#889795` | — | Secondary tint, supporting elements |
-| 🟤 | **Desert Sand** | `#B39986` | 7521 C | Accent color, attribution text, decorative lines |
-| 🟤 | Desert Sand Dark | `#685954` | — | Deep warm accent |
-| 🟤 | Desert Sand Mid | `#A1918C` | — | Mid-tone warm neutral |
-| ⬜ | **Pebble White** | `#F0EFE7` | — | Primary text on dark, backgrounds |
-| ⬜ | Pebble White Mid | `#F3F2EC` | — | Near-white background |
-| ⬜ | Neutral Mid | `#B4B3AD` | — | Dividers, supporting neutral |
+| Swatch | Name | Hex | Primary Use |
+|---|---|---|---|
+| 🌹 | **Rose Berry** | `#BF5468` | Wordmark, headline text, primary accent, CTAs |
+| 🌿 | **Sage Green** | `#BDD9B0` | Secondary accent — nature, body, groundedness |
+| 🌾 | **Golden Sand** | `#F2CDA0` | Warm accent — community, warmth, transformation |
+| 🌸 | **Blush Pink** | `#F2CCC9` | Soft accent, backgrounds, gentle transitions |
+| ☁️ | **Pebble Mist** | `#E0E4E0` | Neutral background, whitespace substitute, dividers |
 
 **Standard combination for social graphics:**
-- Background: Mossy Green Dark `#515F5D`
-- Headline text: Pebble White `#F0EFE7`
-- Accent / supporting text: Desert Sand `#B39986`
-- Vertical accent line: Desert Sand `#B39986`
+- Background: soft radial/floral gradient blending Blush Pink → Golden Sand → Pebble Mist
+- Headline / wordmark: Rose Berry (deepened for contrast where needed)
+- Supporting text & fine detail: Rose Berry at full or reduced opacity
+- Decorative motif: overlapping soft-edged floral bursts in Sage Green, Golden Sand, and Blush Pink at varied opacity
 
-### Kids Brand
-
-| Swatch | Name | Hex | Pantone |
-|---|---|---|---|
-| 🟡 | **Sunny Glow** (primary) | `#FFE486` | 120 C |
-| 🟡 | Sunny Glow Dark | `#CCB56A` | — |
-| 🩵 | **Aqua Splash** | `#7EDDD3` | 7471 C |
-| 🩵 | Aqua Splash Dark | `#67ABA5` | — |
-| 🟠 | **Tangerine Burst** | `#FE5000` | Orange 021 C |
-| 🟣 | Grape accent | `#954E8A` | — |
-| 🟣 | Pink accent | `#D06DC1` | — |
-
-### Youth (YTH) Brand
-
-| Swatch | Name | Hex | Pantone |
-|---|---|---|---|
-| 🟢 | **Electric Lime** (primary) | `#E1FF83` | 372 C |
-| ⬛ | **Midnight Black** | `#000000` | Black C |
-| ⬜ | Starlight White | `#FFFFFF` | — |
-
-### Hospitality / Attention Color
-
-| Swatch | Name | Hex | Pantone | Use |
-|---|---|---|---|---|
-| 🩵 | **Mint** | `#A0DAB3` | 344 C | Greeter shirts, wayfinding, first-impression touchpoints |
+### Usage Notes
+- The palette is intentionally soft and pastel — it should never read as clinical or corporate. Avoid pure white or pure black as primary fields; use Pebble Mist and deep Rose Berry as the tonal poles instead.
+- Sage Green and Golden Sand are best used in small, organic shapes (petals, bursts, dividers) rather than large flat fields — they carry more warmth as accents than as backgrounds.
+- Reserve high-saturation Rose Berry for type and focal points; let the surrounding palette stay muted so the wordmark has room to breathe.
 
 ---
 
@@ -105,106 +64,112 @@ The icon is an abstract S-curve built from three parallel flowing lines — simu
 
 ### Typeface System
 
-| Role | Font | Character |
+| Role | Style | Character |
 |---|---|---|
-| **Headline / Display** | **Recoleta Regular** | Warm, rounded serif — approachable and editorial |
-| Headline emphasis | Recoleta Italic | Used sparingly for key words within headlines |
-| **Body / UI** | **Helvetica Neue** | Clean, neutral sans-serif |
-| Body weights in use | Light · Regular · Medium · **Bold** | — |
+| **Display / Wordmark** | Elegant high-contrast serif (Didone-influenced, soft curling terminals) | Literary, warm, unhurried — feels hand-considered rather than corporate |
+| **Subtitle / Labels** | Tracked-out sans-serif small caps | Clean, quiet, confident — never competes with the serif headline |
+| **Body / Supporting copy** | Same sans-serif family as labels, sentence case | Readable, plain-spoken, emotionally intelligent |
 
 ### Usage Rules
+- The display serif is reserved for the wordmark and major titles only — never set body paragraphs in it.
+- Subtitles, author credits, and series/category labels use wide letter-spacing and small caps for a quiet, editorial feel (see "MODERN BIRTH · PRIMAL WISDOM" and the author byline on the cover).
+- Favor generous white space (or "pastel space") over dense type — the brand's pacing should feel like a slow breath, not a scroll-stopper.
+- Hierarchy: one dominant serif wordmark/title + one supporting tracked sans-serif line is the standard two-level system. Avoid introducing a third typeface.
 
-- **Recoleta** = display only. Sermon titles, quote graphics, event headers, large-format headlines.
-- **Helvetica Neue** = everything else. Body copy, captions, labels, UI text, subtitles, social post supporting text.
-- Never set body paragraphs in Recoleta.
-- Favor generous white space over dense type.
-- Hierarchy: one dominant Recoleta headline + Helvetica Neue support text is the standard two-level system.
-- For quotes or social posts, use all lowercase except biblical words such as "Jesus" "Lord" "God"
-
-### Size Guidelines (Social / Digital)
-
-| Element | Size Range |
+### Size Guidance (Book / Print Reference)
+| Element | Treatment |
 |---|---|
-| Display quote / title | 68–76pt |
-| Attribution / secondary headline | 44pt minimum |
-| Series / event label | 24–28pt |
-| Church name / identifier | 22–26pt Bold |
-| Body / caption | 16–20pt |
+| Wordmark / title | Large-scale serif, front-and-center or left-weighted |
+| Subtitle | Small caps, wide tracking, roughly 1/8–1/10 the title size |
+| Author / attribution | Small caps, wide tracking, similar size to subtitle |
+| Body copy (marketing/social) | Sentence case, comfortable reading size, generous line-height |
 
 ---
 
-## Sub-Brand Marks
+## Brand Voice & Audience Framework
 
-### stonecreek KIDS
-- **Mark:** Bold 3D bubble-letter "KIDS" with spark/star accents, sitting beneath the horizontal stonecreek lockup.
-- **Primary colorway:** Sunny Glow yellow-gold on dark.
-- **Alt colorways:** Aqua Splash (teal), Tangerine Burst (orange), black-and-white versions.
-- **Mood:** High-energy, adventurous, bold, fun. Think: "Let the Adventure Begin."
+Presence is not marketed to a single demographic — it's built to be read through three overlapping lenses: **generation**, **life stage**, and **worldview**. Every campaign should start from the universal pillars below, then flex language toward whichever lens fits the specific audience.
 
-### YTH — youth at stonecreek
-- **Mark:** Blocky all-caps "YTH" monogram with a 4-point sparkle accent on the H. Full name "youth at stonecreek" (lowercase) beneath.
-- **Primary colorway:** Electric Lime on black.
-- **Alt colorways:** Black on light gray, Electric Lime on dark backgrounds, Lime-only mark.
-- **Mood:** Current, direct, street-influenced, bold. Aimed at middle and high school students.
+### Universal Brand Pillars
+1. **You Are Not Broken** — the emotional core; women are already whole.
+2. **Trust Your Body / The Human Blueprint** — the body is something to understand, not fight.
+3. **We Were Never Meant to Do This Alone** — community as design, not luxury.
+4. **Birth Is Transformation** — becoming, not performing.
+5. **Presence Changes Everything** — the thread tying it all together.
+
+### Messaging Style by Generation
+| Audience | Tone |
+|---|---|
+| Gen Z (21–28) | Direct, authentic, transparent, unpolished over polished |
+| Millennials (29–43) — primary audience | Thoughtful, evidence-informed, emotionally intelligent |
+| Gen X (44–54) | Confident, respectful, understated |
+
+### Messaging Style by Worldview
+| Audience | Tone |
+|---|---|
+| Conservative & Traditional | Warm, grounded, relational — themes presented without political language |
+| Progressive & Justice-Oriented | Compassionate, honest, evidence-informed |
+
+### Practical Rule
+Don't rewrite the message for each audience — **illuminate** the facet of it each audience is already primed to hear. One authentic brand voice, many points of entry.
 
 ---
 
 ## Layout & Design Principles
 
 ### Composition
-- **Clean and uncluttered.** Nothing extra. Every element earns its place.
-- Generous white/dark space is a design feature, not waste.
-- Left-aligned text is standard; centered layouts reserved for high-impact single-statement moments.
-- Vertical Desert Sand accent lines are a recurring structural motif (see quote post layout).
+- **Soft, organic, unhurried.** The cover's radial floral burst — overlapping translucent petal shapes in Sage Green, Golden Sand, and Blush Pink fading into Pebble Mist — is the core visual signature. Reuse this bloom motif (or restrained excerpts of it) as a background texture across marketing materials rather than inventing new decorative systems.
+- Left-weighted or asymmetric compositions are standard (see cover: wordmark and subtitle sit right-of-center against a lighter left field). Avoid rigid center-lock symmetry except for single-statement quote graphics.
+- Let pastel gradients do the work that hard lines and boxes would do in a more corporate brand — dividers and transitions should feel like light fading, not like a ruled border.
 
-### Standard Social Graphic Structure (Quote / Sermon Posts)
+### Standard Quote / Social Graphic Structure
 ```
-Canvas: 1080 × 1350px (4:5 portrait)
+Canvas: portrait, 4:5 or 1:1
 
-[Left panel: Mossy Green Dark, ~440px wide, fading into photo]
+[Background: soft pastel floral bloom gradient — Blush Pink / Golden Sand / Sage 
+ Green bursts fading into Pebble Mist, opacity varied for depth]
   │
-  ├── Desert Sand vertical accent line (54–61px from left)
-  ├── Decorative open-quote mark (Desert Sand, ~130pt, top-left)
-  ├── Quote lines in Recoleta (Pebble White, 68–76pt)
-  ├── Attribution in Helvetica Neue (Desert Sand, 44pt+)
-  └── Series / Church name at bottom (Pebble White, small)
-
-[Right: Photo — full bleed, subject clearly visible]
-[Bottom vignette: dark fade over bottom 300px for legibility]
+  ├── Quote text in the display serif, Rose Berry (deepened for contrast), 
+  │     left- or center-set depending on quote length
+  ├── Attribution in tracked-out sans-serif small caps, Rose Berry
+  └── "presence" wordmark, small, bottom corner or footer
 ```
 
-### Photography Style
-- Real, candid, community-oriented.
-- Diverse subjects — reflects the multi-ethnic, multi-generational makeup of the church.
-- Color grade leans warm/earthy to complement the brand palette.
-- On-brand overlays use Mossy Green Dark with gradient fade; avoid heavy filters that obscure people.
+### Photography & Imagery Style
+- When photography is used, it should feel candid, warm, and human — consistent with the book's themes of connection and community — rather than clinical or staged.
+- Avoid heavy filters or hard color grades that fight the pastel palette; imagery should sit comfortably alongside the floral bloom motif, not compete with it.
+- Illustrated/abstract floral elements are preferred over literal medical or clinical imagery for brand-level materials (the bloom motif *is* the brand's visual metaphor for transformation).
 
-### Branded Merch Visual Language (reference)
-- **Main brand apparel:** Mossy Green, Desert Sand, Charcoal — muted, wearable palette.
-- **Kids apparel:** Sunny Glow + KIDS mark on hoodies, shirts.
-- **YTH apparel:** Electric Lime or black with YTH mark — bold, high-contrast.
-- **Greeter shirts:** Mint `#A0DAB3` — immediately identifiable in a crowd.
-- **Wayfinding signage:** Desert Sand background + Recoleta headline + Pebble White arrow — warm, welcoming, not corporate.
+### Content Voice Reference
+Pulled from the book itself, usable as on-brand quote-post source material: lines emphasizing wholeness ("You are not who you once were, and you are not yet who you will become"), community ("You are not on an island by yourself"), and presence as practice ("Presence is the place where we draw from the well of what is true inside ourselves"). Quote graphics should always be sourced from the approved content bank rather than paraphrased freely, to preserve the author's voice.
 
 ---
 
 ## At-a-Glance Summary
 
 ```
-MAIN BRAND
-  Backgrounds:  #515F5D (dark)  ·  #F0EFE7 (light)
-  Primary:      #6C7E7C (Mossy Green)
-  Accent:       #B39986 (Desert Sand)
-  Headline:     Recoleta Regular / Italic
-  Body:         Helvetica Neue (Light · Regular · Medium · Bold)
+WORDMARK
+  Always lowercase, one word: "presence"
+  No companion icon
 
-KIDS BRAND
-  Primary:      #FFE486 (Sunny Glow)
-  Accents:      #7EDDD3 · #FE5000 · #954E8A · #D06DC1
+MAIN PALETTE
+  Rose Berry:     #BF5468  (wordmark, headlines, primary accent)
+  Sage Green:     #BDD9B0  (secondary / organic accent)
+  Golden Sand:    #F2CDA0  (warm accent)
+  Blush Pink:     #F2CCC9  (soft accent / background)
+  Pebble Mist:    #E0E4E0  (neutral background)
 
-YOUTH (YTH) BRAND
-  Primary:      #E1FF83 (Electric Lime)  on  #000000 (Midnight Black)
+TYPOGRAPHY
+  Display:        Elegant high-contrast serif — wordmark & titles only
+  Support:        Tracked-out sans-serif small caps — subtitles, labels, body
 
-ATTENTION COLOR
-  Mint:         #A0DAB3  (greeters, wayfinding)
+SIGNATURE MOTIF
+  Radial floral bloom gradient (Sage / Sand / Blush → Pebble Mist)
+
+BRAND PILLARS
+  You Are Not Broken · Trust Your Body · Never Alone · 
+  Birth Is Transformation · Presence Changes Everything
+
+PRIMARY AUDIENCE
+  Millennial women (29–43), read through generation, life stage, and worldview
 ```
